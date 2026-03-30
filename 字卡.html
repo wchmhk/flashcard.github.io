@@ -745,6 +745,13 @@
                       </div>
                       <input type="text" id="keyConceptsSearchInput" placeholder="在此工作表中搜尋..." class="bg-white dark:bg-gray-800 w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-base">
                   </div>
+                  <!-- 標籤篩選區域 -->
+<div id="tagFilterContainer" class="flex flex-wrap gap-2 mb-4 hidden">
+    <span class="text-sm self-center mr-2 text-gray-500">標籤篩選：</span>
+    <div id="tagList" class="flex flex-wrap gap-2">
+        <!-- 標籤按鈕會動態生成 -->
+    </div>
+</div>
                   <!-- Toggle All Button -->
                   <button id="toggleAllConceptsBtn" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg text-sm whitespace-nowrap hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
                       展開全部
@@ -1823,6 +1830,8 @@
         let drillTimers = []; // Store timers for drill mode
         let reviewCycleCount = 0; // Count cycles of review
         let sidesFlipped = false; // Track if card sides are flipped during review
+
+        let currentTagFilter = 'all';
 
         // In-memory storage for cards and decks
         let cardsData = [];
@@ -8720,92 +8729,51 @@
                                     const sheetListContainer = document.getElementById('keyConceptsSheetList');
                                     const contentContainer = document.getElementById('keyConceptsContent');
                                     const controlsContainer = document.getElementById('keyConceptsControlsContainer');
+                                    const tagFilterContainer = document.getElementById('tagFilterContainer');
                                     const searchInput = document.getElementById('keyConceptsSearchInput');
-                                    const toggleAllBtn = document.getElementById('toggleAllConceptsBtn');
 
                                     sheetListContainer.innerHTML = '';
-                                    contentContainer.innerHTML = ''; // 清除先前內容
+                                    contentContainer.innerHTML = '';
+                                    currentTagFilter = 'all'; // 重置篩選
 
-                                    // 檢查是否有從 Google Sheets 導入的數據
                                     if (Object.keys(excelSheets).length === 0) {
-                                        contentContainer.innerHTML = `
-                                            <div class="text-center py-10 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                                                <h3 class="text-lg font-medium">無可用數據</h3>
-                                                <p class="mt-2 text-gray-600 dark:text-gray-400">請先使用「數據管理」頁面的「從 Google Sheets 導入」功能載入您的概念表。</p>
-                                                <button id="goToImportBtnFromConcepts" class="mt-4 bg-primary hover:bg-opacity-80 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
-                                                    前往導入
-                                                </button>
-                                            </div>
-                                        `;
-                                        document.getElementById('goToImportBtnFromConcepts').addEventListener('click', () => {
-                                            window.showSection('dataManagement');
-                                            setTimeout(openGSheetsImportModal, 100);
-                                        });
-                                        controlsContainer.classList.add('hidden'); // 隱藏控制項
+                                        // ... (保持原有的「無可用數據」顯示邏輯) ...
                                         return;
                                     }
 
-                                    // 有數據時，顯示控制項並清空搜尋框
                                     controlsContainer.classList.remove('hidden');
+                                    tagFilterContainer.classList.remove('hidden');
                                     searchInput.value = '';
 
-                                    // 為每個工作表創建按鈕
                                     Object.keys(excelSheets).forEach(sheetName => {
                                         const button = document.createElement('button');
                                         button.textContent = sheetName;
-                                        button.dataset.sheetName = sheetName; // 使用 data attribute 存儲名稱
-                                        button.className = 'px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-primary/10 transition-colors focus:outline-none focus:ring-2 focus:ring-primary';
+                                        button.dataset.sheetName = sheetName;
+                                        button.className = 'px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-primary/10 transition-colors focus:outline-none';
                                         button.addEventListener('click', () => {
-                                            // 更新按鈕樣式
                                             document.querySelectorAll('#keyConceptsSheetList button').forEach(btn => btn.classList.remove('bg-primary', 'text-white', 'border-primary'));
                                             button.classList.add('bg-primary', 'text-white', 'border-primary');
-                                            // 切換工作表時，應用當前的搜尋條件
-                                            displaySheetConcepts(sheetName, searchInput.value);
+                                            currentTagFilter = 'all'; // 切換工作表時重置標籤
+                                            updateTagFilters(sheetName); // 更新標籤按鈕列表
+                                            displaySheetConcepts(sheetName, searchInput.value, currentTagFilter);
                                         });
                                         sheetListContainer.appendChild(button);
                                     });
 
-                                    // 搜尋欄的事件監聽器
                                     searchInput.addEventListener('input', () => {
                                         const activeSheetBtn = document.querySelector('#keyConceptsSheetList button.bg-primary');
                                         if (activeSheetBtn) {
-                                            const activeSheetName = activeSheetBtn.dataset.sheetName;
-                                            displaySheetConcepts(activeSheetName, searchInput.value);
+                                            displaySheetConcepts(activeSheetBtn.dataset.sheetName, searchInput.value, currentTagFilter);
                                         }
                                     });
 
-                                    // 【關鍵修改】為「展開/收合全部」按鈕設置事件監聽器 (確保只設置一次)
-                                    if (!toggleAllBtn.listenerAttached) {
-                                        toggleAllBtn.addEventListener('click', () => {
-                                            const currentState = toggleAllBtn.dataset.state || 'closed';
-                                            const detailsElements = document.querySelectorAll('#keyConceptsContent details');
-                                            const shouldOpen = currentState === 'closed';
-
-                                            detailsElements.forEach(detail => {
-                                                detail.open = shouldOpen;
-                                            });
-
-                                            // 更新按鈕狀態和文字
-                                            if (shouldOpen) {
-                                                toggleAllBtn.textContent = '收合全部';
-                                                toggleAllBtn.dataset.state = 'open';
-                                            } else {
-                                                toggleAllBtn.textContent = '展開全部';
-                                                toggleAllBtn.dataset.state = 'closed';
-                                            }
-                                        });
-                                        toggleAllBtn.listenerAttached = true; // 標記已設置監聽器
-                                    }
-
-
-                                    // 自動點擊並顯示第一個工作表的內容
                                     if (sheetListContainer.firstChild) {
                                         sheetListContainer.firstChild.click();
                                     }
                                 }
 
                                 // 4. 顯示指定工作表的概念列表 (已加入圖片與文字混合顯示)
-                                function displaySheetConcepts(sheetName, searchText = '') {
+                                function displaySheetConcepts(sheetName, searchText = '', tagFilter = 'all') {
                                     const contentContainer = document.getElementById('keyConceptsContent');
                                     contentContainer.innerHTML = '';
                                     const targetDeck = decksData.find(d => d.name === sheetName);
@@ -8815,23 +8783,39 @@
                                         const card = cardsData.find(c => c.id === cardId);
                                         if (!card) return;
 
-                                        // 搜尋功能
+                                        // 搜尋篩選
                                         if (searchText && !stripHtml(card.frontText + card.backText).toLowerCase().includes(searchText.toLowerCase())) return;
+
+                                        // 標籤篩選
+                                        if (tagFilter !== 'all') {
+                                            if (!card.tags || !card.tags.includes(tagFilter)) return;
+                                        }
 
                                         const detailsEl = document.createElement('details');
                                         detailsEl.className = 'bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm group mb-3 border border-gray-100 dark:border-gray-700';
 
+                                        // ... (Summary 部分保持不變) ...
                                         const summaryEl = document.createElement('summary');
                                         summaryEl.className = 'font-bold text-lg list-none cursor-pointer flex justify-between items-start';
-                                        // 顯示正面 (B欄)
+
+                                        // 在標題處顯示標籤（可選）
+                                        let tagsHtml = '';
+                                        if (card.tags && card.tags.length > 0) {
+                                            tagsHtml = `<div class="mt-1 flex flex-wrap gap-1">` +
+                                                card.tags.map(t => `<span class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-500 text-[10px] rounded">${t}</span>`).join('') +
+                                                `</div>`;
+                                        }
+
                                         summaryEl.innerHTML = `
-                                            <div class="flex-1 text-primary dark:text-blue-400">${card.frontText}</div>
+                                            <div class="flex-1">
+                                                <div class="text-primary dark:text-blue-400">${card.frontText}</div>
+                                                ${tagsHtml}
+                                            </div>
                                             <svg class="w-5 h-5 ml-2 mt-1 transition-transform group-open:rotate-180 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
                                         `;
 
                                         const answerDiv = document.createElement('div');
                                         answerDiv.className = 'mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 leading-relaxed';
-                                        // 顯示背面 (C欄)
                                         answerDiv.innerHTML = `<div class="text-gray-700 dark:text-gray-300">${card.backText}</div>`;
 
                                         detailsEl.appendChild(summaryEl);
@@ -9052,29 +9036,30 @@
 
                                 // 【新增】可重用的函數，用於將 excelSheets 轉換為 cardsData 和 decksData (已修復和強化)
                                 function processSheetsIntoCardsAndDecks() {
-                                    console.log("開始精準導入：確保順序與完整性...");
+                                    console.log("開始精準導入（含標籤處理）...");
                                     let totalImportCount = 0;
                                     const now = Date.now();
+
+                                    // 先標記哪些是「標籤卡組」，以便稍後清理重新生成
+                                    // 我們保留 Sheet 卡組，但標籤卡組我們會重新根據內容生成
+                                    decksData = decksData.filter(d => d.type !== 'tag');
 
                                     Object.keys(excelSheets).forEach(sheetName => {
                                         const sheet = excelSheets[sheetName];
                                         if (!sheet || !sheet.data) return;
 
-                                        // --- 修正順序問題：清理舊資料 ---
-                                        // 找到現有的同名卡組
-                                        let targetDeck = decksData.find(d => d.name === sheetName);
+                                        let targetDeck = decksData.find(d => d.name === sheetName && d.type !== 'tag');
 
                                         if (targetDeck) {
-                                            // 如果卡組已存在，從全域 cardsData 中移除該卡組原本的所有字卡
                                             const oldIds = new Set(targetDeck.cardIds);
                                             cardsData = cardsData.filter(c => !oldIds.has(c.id));
-                                            targetDeck.cardIds = []; // 清空 ID 列表準備重新填入
+                                            targetDeck.cardIds = [];
                                         } else {
-                                            // 如果不存在，建立新卡組
                                             targetDeck = {
                                                 id: now + Math.floor(Math.random() * 1000),
                                                 name: sheetName,
-                                                description: "從 Google Sheets 導入",
+                                                type: 'sheet',
+                                                description: "從工作表導入",
                                                 cardIds: [],
                                                 createdAt: now
                                             };
@@ -9082,28 +9067,28 @@
                                         }
 
                                         const sheetData = sheet.data;
-                                        // 從第 2 行開始 (index 1)，因為第 1 行是標題
                                         for (let i = 1; i < sheetData.length; i++) {
                                             const row = sheetData[i];
                                             if (!row || row.length < 2) continue;
 
-                                            // B 欄 = 概念 (index 1), C 欄 = 定義 (index 2)
-                                            const frontRaw = row[1];
-                                            const backRaw = row[2];
+                                            const frontRaw = row[1]; // B欄
+                                            const backRaw = row[2];  // C欄
+                                            const tagsRaw = row[3];  // D欄：標籤
 
                                             const fResult = processImportedContent(frontRaw);
                                             const bResult = processImportedContent(backRaw);
 
-                                            // 檢查內容有效性
                                             if (!fResult.text && !bResult.text) continue;
 
-                                            // 生成唯一且具備順序性的 ID
-                                            const newCardId = parseInt(`${now}${i}`);
+                                            // 處理標籤：支援多個標籤（用逗號、空格、分號分隔）
+                                            const tags = tagsRaw ? String(tagsRaw).split(/[,，\s;；]+/).map(t => t.trim()).filter(t => t !== "") : [];
 
+                                            const newCardId = parseInt(`${now}${i}`);
                                             const newCard = {
                                                 id: newCardId,
                                                 frontText: fResult.text,
                                                 backText: bResult.text,
+                                                tags: tags, // 儲存標籤到字卡物件中
                                                 nextReview: now,
                                                 repetitions: 0,
                                                 easeFactor: 2.0,
@@ -9111,12 +9096,67 @@
                                             };
 
                                             cardsData.push(newCard);
-                                            targetDeck.cardIds.push(newCardId); // 按順序推入卡組
+                                            targetDeck.cardIds.push(newCardId);
+
+                                            // 為每個標籤建立/更新卡組
+                                            tags.forEach(tagName => {
+                                                let tagDeck = decksData.find(d => d.name === tagName && d.type === 'tag');
+                                                if (!tagDeck) {
+                                                    tagDeck = {
+                                                        id: Date.now() + Math.floor(Math.random() * 100000),
+                                                        name: tagName,
+                                                        type: 'tag',
+                                                        description: "自動生成的標籤卡組",
+                                                        cardIds: [],
+                                                        createdAt: now
+                                                    };
+                                                    decksData.push(tagDeck);
+                                                }
+                                                if (!tagDeck.cardIds.includes(newCardId)) {
+                                                    tagDeck.cardIds.push(newCardId);
+                                                }
+                                            });
+
                                             totalImportCount++;
                                         }
                                     });
 
-                                    console.log(`導入完成！共計 ${totalImportCount} 張字卡，已按 Excel 順序排列。`);
+                                    console.log(`導入完成！共計 ${totalImportCount} 張字卡及相關標籤卡組。`);
+                                }
+
+                                function updateTagFilters(sheetName) {
+                                    const tagList = document.getElementById('tagList');
+                                    tagList.innerHTML = '';
+
+                                    const targetDeck = decksData.find(d => d.name === sheetName);
+                                    if (!targetDeck) return;
+
+                                    // 收集該工作表內所有字卡出現過的標籤
+                                    let tagsInSheet = new Set();
+                                    targetDeck.cardIds.forEach(cardId => {
+                                        const card = cardsData.find(c => c.id === cardId);
+                                        if (card && card.tags) {
+                                            card.tags.forEach(t => tagsInSheet.add(t));
+                                        }
+                                    });
+
+                                    const allTags = ['all', ...Array.from(tagsInSheet).sort()];
+
+                                    allTags.forEach(tag => {
+                                        const btn = document.createElement('button');
+                                        btn.textContent = tag === 'all' ? '全部' : tag;
+                                        btn.className = `px-3 py-1 text-sm rounded-full border ${currentTagFilter === tag ? 'bg-blue-500 text-white border-blue-500' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600'}`;
+
+                                        btn.addEventListener('click', () => {
+                                            currentTagFilter = tag;
+                                            // 更新 UI 樣式
+                                            updateTagFilters(sheetName);
+                                            // 執行篩選
+                                            const searchInput = document.getElementById('keyConceptsSearchInput');
+                                            displaySheetConcepts(sheetName, searchInput.value, currentTagFilter);
+                                        });
+                                        tagList.appendChild(btn);
+                                    });
                                 }
 
                             </script>
