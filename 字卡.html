@@ -5243,10 +5243,17 @@
 
             // 点击其他区域关闭下拉菜单
             document.addEventListener('click', function(e) {
-                if (!deckOptions.contains(e.target) && !selectArea.contains(e.target)) {
-                    deckOptions.classList.add('hidden');
+                // 向上尋找最近的符合 .geo-wiki-btn 的元素
+                const btn = e.target.closest('.geo-wiki-btn');
+                if (btn) {
+                    e.preventDefault();
+                    e.stopPropagation(); // 阻止 details 標籤切換狀態
+                    const target = btn.getAttribute('data-target');
+                    if (target) {
+                        window.jumpToCard(target);
+                    }
                 }
-            });
+            }, true); // 使用 Capture 模式確保優先處理
 
             // 设置搜索框事件 - 自動彈出菜單的重點部分
             searchInput.addEventListener('focus', function(e) {
@@ -6876,14 +6883,12 @@
             if (!html) return "";
             const tmp = document.createElement("DIV");
             tmp.innerHTML = html;
-            // 取得文字後，移除所有不可見字元、零寬空格、HTML 實體空格
+            // 取得文字後，移除零寬空格 \u200B 等不可見字元
             return (tmp.textContent || tmp.innerText || "")
-                .replace(/[\u200B-\u200D\uFEFF]/g, '') // 移除零寬空格
-                .replace(/\u00A0/g, ' ')               // 將 &nbsp; 轉為一般空格
-                .replace(/\s+/g, ' ')                  // 將多個空格併為一個
+                .replace(/[\u200B-\u200D\uFEFF]/g, '')
+                .replace(/\s+/g, ' ') // 將多個空格/換行合併
                 .trim();
         }
-
 
         // Open card edit modal
         function openCardEditModal(cardId) {
@@ -9191,53 +9196,60 @@
                                 // 1. 全域跳轉函數
                                 window.jumpToCard = function(targetText) {
                                     if (!targetText) return;
-                                    const cleanTarget = stripHtml(targetText).toLowerCase();
-                                    console.log("尋找字卡:", cleanTarget);
 
-                                    // 尋找正面匹配的字卡
-                                    const targetCard = cardsData.find(c => stripHtml(c.frontText).toLowerCase() === cleanTarget);
+                                    // 1. 標準化搜尋目標
+                                    const cleanTarget = stripHtml(targetText).trim().toLowerCase();
+                                    console.log("開始跳轉搜尋:", cleanTarget);
+
+                                    // 2. 尋找目標字卡
+                                    const targetCard = cardsData.find(c => stripHtml(c.frontText).trim().toLowerCase() === cleanTarget);
 
                                     if (targetCard) {
+                                        // 3. 尋找所屬卡組
                                         const parentDeck = decksData.find(d => d.cardIds.includes(targetCard.id));
                                         if (parentDeck) {
+                                            // 切換到一覽表頁面
                                             window.showSection('keyConcepts');
 
-                                            // 觸發分頁切換
+                                            // 4. 點擊對應的分頁按鈕 (加上引號保護)
                                             const deckBtn = document.querySelector(`#keyConceptsSheetList button[data-sheet-name="${parentDeck.name}"]`);
-                                            if (deckBtn) deckBtn.click();
+                                            if (deckBtn) {
+                                                deckBtn.click();
+                                            }
 
-                                            // 滾動到目標
+                                            // 5. 給予一點時間讓 DOM 渲染完成後再執行捲動
                                             setTimeout(() => {
                                                 const summaries = document.querySelectorAll('#keyConceptsContent summary');
+                                                let found = false;
+
                                                 for (let summary of summaries) {
                                                     const titleDiv = summary.querySelector('.concept-title');
-                                                    if (titleDiv && stripHtml(titleDiv.innerHTML).toLowerCase() === cleanTarget) {
+                                                    // 同樣使用標準化比對
+                                                    if (titleDiv && stripHtml(titleDiv.innerHTML).trim().toLowerCase() === cleanTarget) {
                                                         const details = summary.parentElement;
-                                                        details.open = true;
+                                                        details.open = true; // 展開
+
+                                                        // 捲動到視窗中央
                                                         details.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                                                        // 加上閃爍特效提示使用者
                                                         details.classList.add('ring-4', 'ring-yellow-400', 'z-50');
                                                         setTimeout(() => details.classList.remove('ring-4', 'ring-yellow-400'), 2500);
-                                                        return;
+
+                                                        found = true;
+                                                        break;
                                                     }
                                                 }
-                                            }, 400);
+
+                                                if (!found) {
+                                                    showNotification(`已切換分頁，但找不到具體標題：「${targetText}」`);
+                                                }
+                                            }, 500); // 增加到 500ms 確保渲染完畢
                                         }
                                     } else {
-                                        showNotification(`找不到「${targetText}」的字卡`);
+                                        showNotification(`系統中找不到「${targetText}」的字卡定義`);
                                     }
                                 };
-
-                                // 2. 核心監聽器：利用事件委託解決按鈕失效問題
-                                document.addEventListener('click', function(e) {
-                                    // 檢查點擊的對象是否為我們的 Wiki 按鈕 (或是按鈕內的文字)
-                                    const btn = e.target.closest('.geo-wiki-btn');
-                                    if (btn) {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        const target = btn.getAttribute('data-target');
-                                        window.jumpToCard(target);
-                                    }
-                                }, true); // 使用 Capture 模式確保優先權
 
                                 let _keywordCache = null;
 
