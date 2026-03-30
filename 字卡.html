@@ -9268,9 +9268,9 @@
                                 async function askGeminiMain(prompt, fileData = null) {
                                     let apiKey = localStorage.getItem('google_api_key');
 
-                                    // 安全檢查：防止使用者誤填網址
-                                    if (apiKey && apiKey.includes('http')) {
-                                        showNotification("API Key 設定錯誤，請填入純字元金鑰而非網址");
+                                    // 安全檢查：檢查 Key 是否包含網址
+                                    if (apiKey && (apiKey.includes('http') || apiKey.includes('/'))) {
+                                        showNotification("API Key 設定錯誤！請填入純字元金鑰，不要包含網址。");
                                         return null;
                                     }
 
@@ -9279,7 +9279,8 @@
                                         return null;
                                     }
 
-                                    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+                                    // 修正：使用 v1 穩定版接口，並確保模型名稱正確
+                                    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
                                     const parts = [{ text: prompt }];
                                     if (fileData) {
@@ -9295,20 +9296,29 @@
                                         const response = await fetch(url, {
                                             method: 'POST',
                                             headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ contents: [{ parts }] })
+                                            body: JSON.stringify({
+                                                contents: [{ parts: parts }]
+                                            })
                                         });
 
                                         const data = await response.json();
 
+                                        // 處理 API 返回的錯誤
                                         if (data.error) {
-                                            showNotification("API 錯誤: " + data.error.message);
+                                            console.error("Gemini API 返回錯誤:", data.error);
+                                            if (data.error.status === "INVALID_ARGUMENT") {
+                                                showNotification("API Key 無效或格式錯誤，請檢查設置。");
+                                            } else {
+                                                showNotification("API 錯誤: " + data.error.message);
+                                            }
                                             return null;
                                         }
 
+                                        // 解析 AI 回傳的文字
                                         if (data.candidates && data.candidates[0] && data.candidates[0].content) {
                                             return data.candidates[0].content.parts[0].text;
                                         } else {
-                                            throw new Error("AI 無法生成內容，請檢查圖片是否清晰或 Key 是否有效");
+                                            throw new Error("AI 無法生成內容，請確認輸入是否有違規或圖片是否清晰。");
                                         }
                                     } catch (error) {
                                         console.error("AI 呼叫失敗:", error);
