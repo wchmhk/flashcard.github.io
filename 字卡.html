@@ -2186,27 +2186,6 @@
           return `data:image/jpeg;base64,${base64Str}`;
         }
 
-        // 處理導入的內容，檢測並處理base64圖片
-        function processImportedContent(content) {
-            if (!content) return { text: '' };
-
-            // 轉為字串並處理格內換行
-            let str = String(content).replace(/\n/g, '<br>');
-
-            // Google Drive 圖片連結的正則表達式 (支援 file/d/ 或 open?id= 格式)
-            const driveRegex = /https:\/\/drive\.google\.com\/(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]+)[^\s<]*/g;
-
-            // 將內容中的所有 Drive 連結替換為圖片標籤
-            // 我們使用 images.weserv.nl 代理，這能有效解決 Google 的 403 阻擋問題
-            const processedHTML = str.replace(driveRegex, (match, fileId) => {
-                const directUrl = `https://drive.google.com/uc?id=${fileId}`;
-                const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(directUrl)}`;
-                return `<img src="${proxyUrl}" class="max-w-full h-auto rounded-lg my-3 shadow-md block" onerror="this.src='${match}'; this.outerHTML='<a href=${match} target=_blank class=text-blue-500>無法載入圖片，請檢查權限</a>'">`;
-            });
-
-            return { text: processedHTML };
-        }
-
         function initApiSettings() {
             const apiSettingsBtn = document.getElementById('apiSettingsBtn');
             const apiSettingsModal = document.getElementById('apiSettingsModal');
@@ -3796,34 +3775,26 @@
 
         // 處理導入的內容，檢測並處理 base64 圖片和 Google Drive 連結
         function processImportedContent(content) {
-            if (!content) return { text: '', image: null };
+            if (!content) return { text: '' };
 
-            if (typeof content !== 'string') {
-                content = content.toString();
-            }
+            // 將內容轉為字串
+            let str = String(content);
 
-            // 【優先處理 Google Drive 連結】
-            const driveImageUrl = convertGoogleDriveLink(content);
-            if (driveImageUrl) {
-                return {
-                    text: '', // 如果是圖片連結，則文字部分為空
-                    image: driveImageUrl
-                };
-            }
+            // 1. 處理 Google Drive 連結轉圖片
+            // 支援格式: https://drive.google.com/file/d/ID/view... 或 open?id=ID
+            const driveRegex = /https:\/\/drive\.google\.com\/(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]+)[^\s<]*/g;
 
-            // 處理 Base64 圖片 (保留原有功能)
-            if (isBase64Image(content)) {
-                return {
-                    text: '',
-                    image: ensureBase64Prefix(content)
-                };
-            }
+            // 使用 images.weserv.nl 代理以繞過 Google 的直接連結限制
+            str = str.replace(driveRegex, (match, fileId) => {
+                const directUrl = `https://drive.google.com/uc?id=${fileId}`;
+                const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(directUrl)}`;
+                return `<img src="${proxyUrl}" class="max-w-full h-auto rounded-lg my-2 shadow-sm block" onerror="this.onerror=null; this.src='${match}';">`;
+            });
 
-            // 如果都不是，則視為普通文字
-            return {
-                text: content,
-                image: null
-            };
+            // 2. 處理格內換行 (將 \n 轉為 <br>)
+            str = str.replace(/\n/g, '<br>');
+
+            return { text: str.trim() };
         }
 
         // 圖片壓縮核心功能
@@ -8843,33 +8814,25 @@
                                         const card = cardsData.find(c => c.id === cardId);
                                         if (!card) return;
 
-                                        if (searchText && !stripHtml(card.frontText + card.backText + card.extraNote).toLowerCase().includes(searchText.toLowerCase())) return;
+                                        // 搜尋功能
+                                        if (searchText && !stripHtml(card.frontText + card.backText).toLowerCase().includes(searchText.toLowerCase())) return;
 
                                         const detailsEl = document.createElement('details');
-                                        detailsEl.className = 'bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm group mb-3';
+                                        detailsEl.className = 'bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm group mb-3 border border-gray-100 dark:border-gray-700';
 
                                         const summaryEl = document.createElement('summary');
-                                        summaryEl.className = 'font-medium text-lg list-none cursor-pointer flex justify-between items-start';
+                                        summaryEl.className = 'font-bold text-lg list-none cursor-pointer flex justify-between items-start';
+                                        // 顯示正面 (B欄)
                                         summaryEl.innerHTML = `
-                                            <div class="flex-1">${card.frontText}</div>
+                                            <div class="flex-1 text-primary dark:text-blue-400">${card.frontText}</div>
                                             <svg class="w-5 h-5 ml-2 mt-1 transition-transform group-open:rotate-180 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
                                         `;
 
                                         const answerDiv = document.createElement('div');
-                                        answerDiv.className = 'mt-4 pt-4 border-t border-gray-200 dark:border-gray-700';
+                                        answerDiv.className = 'mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 leading-relaxed';
+                                        // 顯示背面 (C欄)
+                                        answerDiv.innerHTML = `<div class="text-gray-700 dark:text-gray-300">${card.backText}</div>`;
 
-                                        // C 欄 (背面)
-                                        let html = `<div class="text-gray-700 dark:text-gray-300">${card.backText}</div>`;
-
-                                        // D 欄 (備註) - 只有在內容不為空時才渲染灰色區域
-                                        // 我們檢查 stripHtml 後是否還有文字，或者是否含有 img 標籤
-                                        const hasNoteContent = stripHtml(card.extraNote).trim() !== "" || card.extraNote.includes('<img');
-
-                                        if (hasNoteContent) {
-                                            html += `<div class="mt-4 p-3 bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-600 rounded-md text-sm text-gray-600 dark:text-gray-400">${card.extraNote}</div>`;
-                                        }
-
-                                        answerDiv.innerHTML = html;
                                         detailsEl.appendChild(summaryEl);
                                         detailsEl.appendChild(answerDiv);
                                         contentContainer.appendChild(detailsEl);
@@ -9088,43 +9051,42 @@
 
                                 // 【新增】可重用的函數，用於將 excelSheets 轉換為 cardsData 和 decksData (已修復和強化)
                                 function processSheetsIntoCardsAndDecks() {
-                                    console.log("正在執行多工作表導入...");
+                                    console.log("正在執行多工作表導入 (B正/C反)...");
                                     let totalImportCount = 0;
 
                                     Object.keys(excelSheets).forEach(sheetName => {
                                         const sheet = excelSheets[sheetName];
                                         if (!sheet || !sheet.data) return;
 
-                                        // 確保或更新卡組
+                                        // 確保或重置卡組
                                         let targetDeck = decksData.find(d => d.name === sheetName);
                                         if (!targetDeck) {
                                             targetDeck = {
                                                 id: Date.now() + Math.floor(Math.random() * 1000),
                                                 name: sheetName,
-                                                description: "從試算表自動導入",
+                                                description: "從 Google Sheets 導入",
                                                 cardIds: [],
                                                 createdAt: Date.now()
                                             };
                                             decksData.push(targetDeck);
                                         } else {
-                                            targetDeck.cardIds = []; // 覆蓋更新
+                                            targetDeck.cardIds = []; // 每次導入都更新該卡組內容
                                         }
 
                                         const sheetData = sheet.data;
                                         for (let i = 1; i < sheetData.length; i++) {
                                             const row = sheetData[i];
-                                            if (!row || row.length <= 1) continue;
+                                            // 確保該列至少有 B 欄內容
+                                            if (!row || row.length < 2) continue;
 
-                                            // B=1 (正面), C=2 (背面), D=3 (備註)
-                                            const frontRaw = row[1];
-                                            const backRaw = row[2];
-                                            const noteRaw = row[3];
+                                            // Mapping: B=index 1 (正面), C=index 2 (背面)
+                                            const frontRaw = row[1]; // B 欄
+                                            const backRaw = row[2];  // C 欄
 
                                             const fResult = processImportedContent(frontRaw);
                                             const bResult = processImportedContent(backRaw);
-                                            const nResult = processImportedContent(noteRaw);
 
-                                            // 如果正面完全沒內容則跳過
+                                            // 如果正面(B欄)完全沒文字也沒圖片連結，就跳過
                                             if (stripHtml(fResult.text).trim() === "" && !fResult.text.includes('<img')) continue;
 
                                             const newCardId = Date.now() + i + Math.floor(Math.random() * 10000);
@@ -9132,7 +9094,6 @@
                                                 id: newCardId,
                                                 frontText: fResult.text,
                                                 backText: bResult.text,
-                                                extraNote: nResult.text, // 儲存 D 欄加工後的內容
                                                 nextReview: Date.now(),
                                                 repetitions: 0,
                                                 easeFactor: 2.0,
@@ -9144,7 +9105,7 @@
                                             totalImportCount++;
                                         }
                                     });
-                                    console.log(`導入完成！共計 ${totalImportCount} 張字卡，分布於 ${Object.keys(excelSheets).length} 個卡組。`);
+                                    console.log(`導入成功：共 ${totalImportCount} 張字卡，分布於 ${Object.keys(excelSheets).length} 個卡組。`);
                                 }
 
                             </script>
