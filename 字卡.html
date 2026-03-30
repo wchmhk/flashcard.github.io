@@ -8807,37 +8807,77 @@
                                 // 4. 顯示指定工作表的概念列表 (已加入圖片與文字混合顯示)
                                 function displaySheetConcepts(sheetName, searchText = '') {
                                     const contentContainer = document.getElementById('keyConceptsContent');
+                                    const toggleBtn = document.getElementById('toggleAllConceptsBtn');
                                     contentContainer.innerHTML = '';
-                                    const targetDeck = decksData.find(d => d.name === sheetName);
-                                    if (!targetDeck) return;
 
+                                    // 找出對應名稱的卡組
+                                    const targetDeck = decksData.find(d => d.name === sheetName);
+                                    if (!targetDeck) {
+                                        contentContainer.innerHTML = '<p class="text-center text-gray-500 py-10">找不到此卡組數據。</p>';
+                                        return;
+                                    }
+
+                                    let itemsDisplayed = 0;
+                                    const lowerSearch = searchText.trim().toLowerCase();
+
+                                    // 依照該卡組內存儲的 ID 順序顯示
                                     targetDeck.cardIds.forEach(cardId => {
                                         const card = cardsData.find(c => c.id === cardId);
                                         if (!card) return;
 
-                                        // 搜尋功能
-                                        if (searchText && !stripHtml(card.frontText + card.backText).toLowerCase().includes(searchText.toLowerCase())) return;
+                                        // 搜尋過濾：包含正面、背面、或備註的純文字
+                                        const fullContent = stripHtml(card.frontText + card.backText + (card.extraNote || '')).toLowerCase();
+                                        if (lowerSearch && !fullContent.includes(lowerSearch)) return;
 
+                                        itemsDisplayed++;
+
+                                        // 建立外殼
                                         const detailsEl = document.createElement('details');
-                                        detailsEl.className = 'bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm group mb-3 border border-gray-100 dark:border-gray-700';
+                                        detailsEl.className = 'bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm group mb-3 border border-gray-100 dark:border-gray-700 transition-all';
 
+                                        // 標題摘要 (B 欄)
                                         const summaryEl = document.createElement('summary');
                                         summaryEl.className = 'font-bold text-lg list-none cursor-pointer flex justify-between items-start';
-                                        // 顯示正面 (B欄)
                                         summaryEl.innerHTML = `
-                                            <div class="flex-1 text-primary dark:text-blue-400">${card.frontText}</div>
-                                            <svg class="w-5 h-5 ml-2 mt-1 transition-transform group-open:rotate-180 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
+                                            <div class="flex-1 text-primary dark:text-blue-400 concept-title">${card.frontText}</div>
+                                            <svg class="w-5 h-5 ml-2 mt-1 transition-transform group-open:rotate-180 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                                <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                            </svg>
                                         `;
 
+                                        // 內容區域
                                         const answerDiv = document.createElement('div');
                                         answerDiv.className = 'mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 leading-relaxed';
-                                        // 顯示背面 (C欄)
-                                        answerDiv.innerHTML = `<div class="text-gray-700 dark:text-gray-300">${card.backText}</div>`;
 
+                                        // 核心邏輯：將背面內容與備註內容轉化為帶連結的 HTML
+                                        const linkedBackText = linkifyContent(card.backText, card.frontText);
+                                        const linkedNote = card.extraNote ? linkifyContent(card.extraNote, card.frontText) : '';
+
+                                        // 構建內部 HTML
+                                        let innerHTML = `<div class="text-gray-800 dark:text-gray-200">${linkedBackText}</div>`;
+
+                                        // 只有在備註 (D 欄) 有實際文字或圖片時才顯示灰色區塊
+                                        const hasNote = stripHtml(linkedNote).trim() !== "" || linkedNote.includes('<img');
+                                        if (hasNote) {
+                                            innerHTML += `
+                                                <div class="mt-4 p-3 bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-600 rounded-md text-sm text-gray-600 dark:text-gray-400">
+                                                    ${linkedNote}
+                                                </div>`;
+                                        }
+
+                                        answerDiv.innerHTML = innerHTML;
                                         detailsEl.appendChild(summaryEl);
                                         detailsEl.appendChild(answerDiv);
                                         contentContainer.appendChild(detailsEl);
                                     });
+
+                                    // 控制「展開全部」按鈕的顯示
+                                    if (itemsDisplayed === 0) {
+                                        contentContainer.innerHTML = `<p class="text-center text-gray-500 py-10">此卡組中沒有符合「${searchText}」的內容。</p>`;
+                                        if (toggleBtn) toggleBtn.style.display = 'none';
+                                    } else {
+                                        if (toggleBtn) toggleBtn.style.display = 'block';
+                                    }
                                 }
 
                                 // 【新增】處理混合內容（文字+圖片連結）的輔助函數
@@ -9118,6 +9158,71 @@
 
                                     console.log(`導入完成！共計 ${totalImportCount} 張字卡，已按 Excel 順序排列。`);
                                 }
+
+                                window.jumpToCard = function(targetText) {
+                                    const searchText = targetText.trim().toLowerCase();
+
+                                    // 尋找正面內容完全匹配的字卡
+                                    const targetCard = cardsData.find(c => stripHtml(c.frontText).trim().toLowerCase() === searchText);
+
+                                    if (targetCard) {
+                                        // 找出該字卡屬於哪個卡組（分頁）
+                                        const parentDeck = decksData.find(d => d.cardIds.includes(targetCard.id));
+
+                                        if (parentDeck) {
+                                            // 切換到「關鍵概念一覽表」頁面
+                                            window.showSection('keyConcepts');
+
+                                            // 模擬點擊該卡組的分頁按鈕
+                                            const deckBtn = document.querySelector(`#keyConceptsSheetList button[data-sheet-name="${parentDeck.name}"]`);
+                                            if (deckBtn) deckBtn.click();
+
+                                            // 等待渲染後滾動到該位置
+                                            setTimeout(() => {
+                                                const allSummaries = document.querySelectorAll('#keyConceptsContent summary div.concept-title');
+                                                for (let title of allSummaries) {
+                                                    if (stripHtml(title.innerHTML).trim().toLowerCase() === searchText) {
+                                                        const details = title.closest('details');
+                                                        details.open = true; // 自動展開
+                                                        details.scrollIntoView({ behavior: 'smooth', block: 'center' }); // 滾動到中間
+
+                                                        // 高亮動畫效果
+                                                        details.classList.add('ring-4', 'ring-yellow-400', 'ring-opacity-50', 'z-10');
+                                                        setTimeout(() => details.classList.remove('ring-4', 'ring-yellow-400', 'ring-opacity-50', 'z-10'), 3000);
+                                                        break;
+                                                    }
+                                                }
+                                            }, 350);
+                                        }
+                                    } else {
+                                        showNotification(`找不到名為「${targetText}」的字卡`);
+                                    }
+                                };
+
+                                function linkifyContent(html, currentCardFront) {
+                                    if (!html) return '';
+
+                                    let processedHtml = html;
+                                    const currentFrontPlain = stripHtml(currentCardFront).trim().toLowerCase();
+
+                                    // 取得所有字卡的名稱作為潛在關鍵字（長度 > 1 且不是自己）
+                                    const allKeywords = cardsData
+                                        .map(c => stripHtml(c.frontText).trim())
+                                        .filter(text => text.length > 1 && text.toLowerCase() !== currentFrontPlain)
+                                        .sort((a, b) => b.length - a.length); // 長詞優先匹配
+
+                                    // 建立正則表達式進行全局替換，避免破壞 HTML 標籤
+                                    allKeywords.forEach(keyword => {
+                                        const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                                        // 只替換不在標籤屬性內、也不在已經是按鈕內的文字
+                                        const regex = new RegExp(`(${escaped})(?![^<]*>|[^<>]*<\/button>)`, 'g');
+
+                                        processedHtml = processedHtml.replace(regex, `<button onclick="event.stopPropagation(); jumpToCard('$1')" class="text-blue-600 dark:text-blue-400 underline decoration-dotted font-bold cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/40 px-0.5 rounded transition-all">$1</button>`);
+                                    });
+
+                                    return processedHtml;
+                                }
+
 
                             </script>
                         </body>
