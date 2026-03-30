@@ -2494,47 +2494,50 @@
 
         // 解析 CSV 數據為二維數組
         function parseCSV(text) {
-            if (!text) return [[]];
-
-            const lines = text.split(/\r?\n/);
+            if (!text) return [];
             const result = [];
+            let row = [];
+            let field = '';
+            let inQuotes = false;
 
-            for (let i = 0; i < lines.length; i++) {
-                let line = lines[i].trim();
-                if (!line) continue;
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                const nextChar = text[i + 1];
 
-                const row = [];
-                let inQuotes = false;
-                let currentField = '';
-
-                for (let j = 0; j < line.length; j++) {
-                    const char = line[j];
-
-                    if (char === '"') {
-                        // 處理引號
-                        if (inQuotes && j < line.length - 1 && line[j + 1] === '"') {
-                            // 處理連續兩個引號（CSV中的轉義引號）
-                            currentField += '"';
-                            j++; // 跳過下一個引號
-                        } else {
-                            // 切換引號模式
-                            inQuotes = !inQuotes;
-                        }
-                    } else if (char === ',' && !inQuotes) {
-                        // 非引號內的逗號表示字段分隔
-                        row.push(currentField);
-                        currentField = '';
+                if (inQuotes) {
+                    if (char === '"' && nextChar === '"') {
+                        field += '"'; // 處理 CSV 內的轉義引號 ""
+                        i++;
+                    } else if (char === '"') {
+                        inQuotes = false; // 離開引號模式
                     } else {
-                        // 普通字符
-                        currentField += char;
+                        field += char; // 這裡會保留引號內的原始換行符號
+                    }
+                } else {
+                    if (char === '"') {
+                        inQuotes = true;
+                    } else if (char === ',') {
+                        row.push(field);
+                        field = '';
+                    } else if (char === '\r' || char === '\n') {
+                        // 只有在引號外，換行才代表一列結束
+                        row.push(field);
+                        if (row.some(f => f.trim() !== '')) {
+                            result.push(row);
+                        }
+                        row = [];
+                        field = '';
+                        if (char === '\r' && nextChar === '\n') i++; // 跳過 \r\n
+                    } else {
+                        field += char;
                     }
                 }
-
-                // 添加最後一個字段
-                row.push(currentField);
+            }
+            // 處理最後一行
+            if (field || row.length > 0) {
+                row.push(field);
                 result.push(row);
             }
-
             return result;
         }
 
