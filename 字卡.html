@@ -9264,7 +9264,7 @@
                                     });
                                 }
 
-                                // 核心 AI 呼叫函數 (修正版：切換至 v1beta 介面)
+                                // 核心 AI 呼叫函數 (升級版：使用最新的 Gemini 2.5 Flash 模型)
                                                                 async function askGeminiMain(prompt, fileData = null) {
                                                                     let apiKey = localStorage.getItem('google_api_key');
 
@@ -9279,8 +9279,8 @@
                                                                         return null;
                                                                     }
 
-                                                                    // 修正：Gemini 1.5 系列目前需使用 v1beta 介面
-                                                                    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+                                                                    // 關鍵修正：gemini-1.5-flash 已退役，改用最新的 gemini-2.5-flash 模型
+                                                                    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
                                                                     const parts = [{ text: prompt }];
                                                                     if (fileData) {
