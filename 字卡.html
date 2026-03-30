@@ -286,8 +286,38 @@
             background-color: rgb(75, 85, 99);
         }
 
-        /* 字卡正面背面分隔線 */
+        /* 優化後的字卡容器，支援長文字滾動 */
+        #cardContainer {
+            min-height: 24rem;
+            max-height: 75vh;
+            width: 100%;
+            background-color: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            cursor: pointer;
+            margin-bottom: 1rem;
+            border: 1px solid rgb(209, 213, 219);
+            overflow-y: auto; /* 允許垂直滾動 */
+            padding: 1.5rem;
+            position: relative;
+        }
+
+        .dark #cardContainer {
+            background-color: rgb(31, 41, 55);
+            border-color: rgb(75, 85, 99);
+        }
+
+        /* 內容包裝器：內容少時居中，內容多時從頂部開始 */
+        .card-content-wrapper {
+            margin: auto 0;
+            width: 100%;
+        }
+
+        /* 移除強制的置中，改由數據驅動 */
         #cardFront, #cardBack {
+            width: 100%;
             word-break: break-word;
         }
 
@@ -845,15 +875,18 @@
                         <button id="exitReviewBtn" class="text-red-500 hover:text-red-700">結束複習</button>
                     </div>
 
+                    <!-- 複習介面中的字卡部分 -->
                     <div id="reviewCard">
-                        <div id="cardContainer" class="w-full h-96 bg-white dark:bg-gray-800 rounded-xl shadow-lg flex flex-col items-center justify-center cursor-pointer mb-4 border border-gray-300 dark:border-gray-700 transition-all duration-500 p-6 relative overflow-auto">
-                            <div id="cardFront" class="text-xl font-medium text-center w-full h-full flex flex-col items-center justify-center">
-                                <div id="frontText" class="mb-4"></div>
-                                <div id="frontImage" class="flex-grow flex justify-center"></div>
+                        <div id="cardContainer">
+                            <!-- 正面 -->
+                            <div id="cardFront" class="card-content-wrapper">
+                                <div id="frontText"></div>
+                                <div id="frontImage"></div>
                             </div>
-                            <div id="cardBack" class="text-xl font-medium text-center w-full h-full hidden flex flex-col items-center justify-center">
-                                <div id="backText" class="mb-4"></div>
-                                <div id="backImage" class="mt-2 flex justify-center"></div>
+                            <!-- 背面 -->
+                            <div id="cardBack" class="card-content-wrapper hidden">
+                                <div id="backText"></div>
+                                <div id="backImage"></div>
                             </div>
                         </div>
 
@@ -6238,6 +6271,9 @@
 
         // Show current card to review (已修復佈局和內容顯示問題)
         function showCurrentCard() {
+          // 重置捲軸位置到頂部
+          const container = document.getElementById('cardContainer');
+          if (container) container.scrollTop = 0;
             // 重置卡片的可見狀態
             cardFront.classList.remove('hidden');
             cardBack.classList.add('hidden');
@@ -8729,44 +8765,48 @@
                                     const sheetListContainer = document.getElementById('keyConceptsSheetList');
                                     const contentContainer = document.getElementById('keyConceptsContent');
                                     const controlsContainer = document.getElementById('keyConceptsControlsContainer');
-                                    const tagFilterContainer = document.getElementById('tagFilterContainer');
                                     const searchInput = document.getElementById('keyConceptsSearchInput');
 
                                     sheetListContainer.innerHTML = '';
                                     contentContainer.innerHTML = '';
-                                    currentTagFilter = 'all'; // 重置篩選
 
-                                    if (Object.keys(excelSheets).length === 0) {
-                                        // ... (保持原有的「無可用數據」顯示邏輯) ...
+                                    // 修改判斷邏輯：如果 excelSheets 沒數據，嘗試從 decksData 生成選單
+                                    let availableDecks = [];
+                                    if (Object.keys(excelSheets).length > 0) {
+                                        availableDecks = Object.keys(excelSheets);
+                                    } else if (decksData.length > 0) {
+                                        // 如果是從 JSON 匯入，excelSheets 會是空的，此時抓取所有卡組名稱
+                                        availableDecks = decksData.map(d => d.name);
+                                    }
+
+                                    if (availableDecks.length === 0) {
+                                        contentContainer.innerHTML = `
+                                            <div class="text-center py-10 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                                                <h3 class="text-lg font-medium">無可用數據</h3>
+                                                <p class="mt-2 text-gray-600 dark:text-gray-400">請先導入 Excel/Google Sheets 或 JSON 備份檔案。</p>
+                                            </div>
+                                        `;
+                                        controlsContainer.classList.add('hidden');
                                         return;
                                     }
 
                                     controlsContainer.classList.remove('hidden');
-                                    tagFilterContainer.classList.remove('hidden');
-                                    searchInput.value = '';
 
-                                    Object.keys(excelSheets).forEach(sheetName => {
+                                    // 為每個卡組/工作表創建按鈕
+                                    availableDecks.forEach(name => {
                                         const button = document.createElement('button');
-                                        button.textContent = sheetName;
-                                        button.dataset.sheetName = sheetName;
+                                        button.textContent = name;
+                                        button.dataset.sheetName = name;
                                         button.className = 'px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-primary/10 transition-colors focus:outline-none';
                                         button.addEventListener('click', () => {
                                             document.querySelectorAll('#keyConceptsSheetList button').forEach(btn => btn.classList.remove('bg-primary', 'text-white', 'border-primary'));
                                             button.classList.add('bg-primary', 'text-white', 'border-primary');
-                                            currentTagFilter = 'all'; // 切換工作表時重置標籤
-                                            updateTagFilters(sheetName); // 更新標籤按鈕列表
-                                            displaySheetConcepts(sheetName, searchInput.value, currentTagFilter);
+                                            displaySheetConcepts(name, searchInput.value);
                                         });
                                         sheetListContainer.appendChild(button);
                                     });
 
-                                    searchInput.addEventListener('input', () => {
-                                        const activeSheetBtn = document.querySelector('#keyConceptsSheetList button.bg-primary');
-                                        if (activeSheetBtn) {
-                                            displaySheetConcepts(activeSheetBtn.dataset.sheetName, searchInput.value, currentTagFilter);
-                                        }
-                                    });
-
+                                    // 自動點擊第一個
                                     if (sheetListContainer.firstChild) {
                                         sheetListContainer.firstChild.click();
                                     }
