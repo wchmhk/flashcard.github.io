@@ -6873,10 +6873,17 @@
 
         // 移除HTML標籤，用於搜索
         function stripHtml(html) {
-            const temporalDiv = document.createElement("div");
-            temporalDiv.innerHTML = html;
-            return temporalDiv.textContent || temporalDiv.innerText || "";
+            if (!html) return "";
+            const tmp = document.createElement("DIV");
+            tmp.innerHTML = html;
+            // 取得文字後，移除所有不可見字元、零寬空格、HTML 實體空格
+            return (tmp.textContent || tmp.innerText || "")
+                .replace(/[\u200B-\u200D\uFEFF]/g, '') // 移除零寬空格
+                .replace(/\u00A0/g, ' ')               // 將 &nbsp; 轉為一般空格
+                .replace(/\s+/g, ' ')                  // 將多個空格併為一個
+                .trim();
         }
+
 
         // Open card edit modal
         function openCardEditModal(cardId) {
@@ -8834,10 +8841,10 @@
                                 // 4. 顯示指定工作表的概念列表 (已加入圖片與文字混合顯示)
                                 function displaySheetConcepts(sheetName, searchText = '') {
                                     const contentContainer = document.getElementById('keyConceptsContent');
-                                    contentContainer.innerHTML = '<div class="text-center py-10">載入中...</div>';
+                                    const toggleBtn = document.getElementById('toggleAllConceptsBtn');
+                                    contentContainer.innerHTML = '<div class="text-center py-10"><span class="animate-spin inline-block mr-2">⏳</span>載入資料中...</div>';
 
-                                    // 清除快取，確保導入新資料後能更新
-                                    _keywordCache = null;
+                                    _keywordCache = null; // 重置快取
 
                                     setTimeout(() => {
                                         const targetDeck = decksData.find(d => d.name === sheetName);
@@ -8854,14 +8861,14 @@
                                             const card = cardsData.find(c => c.id === cardId);
                                             if (!card) return;
 
-                                            const plainText = stripHtml(card.frontText + card.backText + (card.extraNote || '')).toLowerCase();
-                                            if (lowerSearch && !plainText.includes(lowerSearch)) return;
+                                            const searchable = stripHtml(card.frontText + card.backText + (card.extraNote || '')).toLowerCase();
+                                            if (lowerSearch && !searchable.includes(lowerSearch)) return;
 
                                             itemsDisplayed++;
                                             const detailsEl = document.createElement('details');
-                                            detailsEl.className = 'bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm group mb-3 border border-gray-100 dark:border-gray-700';
+                                            detailsEl.className = 'bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm group mb-3 border border-gray-100 dark:border-gray-700 transition-all';
 
-                                            // 監聽打開事件：只有在使用者「點開」時才去計算 Wiki 連結 (Lazy Loading)
+                                            // 懶加載連結
                                             detailsEl.addEventListener('toggle', function() {
                                                 if (this.open) {
                                                     const contents = this.querySelectorAll('.can-link');
@@ -8879,17 +8886,16 @@
                                             `;
 
                                             const answerDiv = document.createElement('div');
-                                            answerDiv.className = 'mt-4 pt-4 border-t border-gray-100 dark:border-gray-700';
+                                            answerDiv.className = 'mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 leading-relaxed';
 
-                                            // 初始先放原始文字，避免加載卡頓
-                                            let html = `<div class="text-gray-800 dark:text-gray-200 can-link">${card.backText}</div>`;
-                                            const hasNote = stripHtml(card.extraNote || '').trim() !== "" || (card.extraNote && card.extraNote.includes('<img'));
+                                            let htmlContent = `<div class="text-gray-800 dark:text-gray-200 can-link">${card.backText}</div>`;
+                                            const hasNote = card.extraNote && (stripHtml(card.extraNote).trim() !== "" || card.extraNote.includes('<img'));
 
                                             if (hasNote) {
-                                                html += `<div class="mt-4 p-3 bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-600 rounded-md text-sm text-gray-600 dark:text-gray-400 can-link">${card.extraNote}</div>`;
+                                                htmlContent += `<div class="mt-4 p-3 bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-600 rounded-md text-sm text-gray-600 dark:text-gray-400 can-link">${card.extraNote}</div>`;
                                             }
 
-                                            answerDiv.innerHTML = html;
+                                            answerDiv.innerHTML = htmlContent;
                                             detailsEl.appendChild(summaryEl);
                                             detailsEl.appendChild(answerDiv);
                                             fragment.appendChild(detailsEl);
@@ -8898,12 +8904,11 @@
                                         contentContainer.innerHTML = '';
                                         contentContainer.appendChild(fragment);
 
-                                        const toggleBtn = document.getElementById('toggleAllConceptsBtn');
                                         if (toggleBtn) toggleBtn.style.display = itemsDisplayed === 0 ? 'none' : 'block';
                                         if (itemsDisplayed === 0 && lowerSearch) {
                                             contentContainer.innerHTML = `<p class="text-center text-gray-500 py-10">找不到符合「${searchText}」的內容。</p>`;
                                         }
-                                    }, 10);
+                                    }, 20);
                                 }
 
                                 // 【新增】處理混合內容（文字+圖片連結）的輔助函數
@@ -9186,39 +9191,51 @@
                                 }
 
                                 window.jumpToCard = function(targetText) {
-                                    // 移除 HTML 標籤並去除前後空白
-                                    const cleanTarget = stripHtml(targetText).trim().toLowerCase();
+                                try {
+                                    const cleanTarget = stripHtml(targetText).toLowerCase();
+                                    console.log("嘗試跳轉至:", cleanTarget);
 
-                                    // 尋找目標字卡
-                                    const targetCard = cardsData.find(c => stripHtml(c.frontText).trim().toLowerCase() === cleanTarget);
+                                    // 搜尋所有字卡，進行深度比對
+                                    const targetCard = cardsData.find(c => stripHtml(c.frontText).toLowerCase() === cleanTarget);
 
                                     if (targetCard) {
                                         const parentDeck = decksData.find(d => d.cardIds.includes(targetCard.id));
                                         if (parentDeck) {
                                             window.showSection('keyConcepts');
+
+                                            // 觸發分頁切換
                                             const deckBtn = document.querySelector(`#keyConceptsSheetList button[data-sheet-name="${parentDeck.name}"]`);
                                             if (deckBtn) deckBtn.click();
 
-                                            // 延遲一點點等 DOM 更新
+                                            // 等待分頁渲染
                                             setTimeout(() => {
                                                 const summaries = document.querySelectorAll('#keyConceptsContent summary');
+                                                let found = false;
                                                 for (let summary of summaries) {
                                                     const titleDiv = summary.querySelector('.concept-title');
-                                                    if (titleDiv && stripHtml(titleDiv.innerHTML).trim().toLowerCase() === cleanTarget) {
+                                                    if (titleDiv && stripHtml(titleDiv.innerHTML).toLowerCase() === cleanTarget) {
                                                         const details = summary.parentElement;
                                                         details.open = true;
                                                         details.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                                                        // 高亮動畫
                                                         details.classList.add('ring-4', 'ring-yellow-400', 'z-10');
                                                         setTimeout(() => details.classList.remove('ring-4', 'ring-yellow-400', 'z-10'), 2500);
-                                                        return;
+                                                        found = true;
+                                                        break;
                                                     }
                                                 }
-                                            }, 300);
+                                                if (!found) console.warn("分頁已切換，但找不到目標標題元素");
+                                            }, 400);
                                         }
                                     } else {
-                                        showNotification(`找不到「${targetText}」`);
+                                        showNotification(`找不到關鍵字：「${targetText}」`);
                                     }
-                                };
+                                } catch (err) {
+                                    console.error("跳轉過程中發生錯誤:", err);
+                                }
+                                return false; // 二重保險，防止按鈕觸發任何預設行為
+                            };
 
                                 let _keywordCache = null;
 
@@ -9237,18 +9254,24 @@
 
                                     let html = element.innerHTML;
                                     const keywords = getKeywords();
-                                    const currentPlain = stripHtml(currentFront).trim().toLowerCase();
+                                    const currentPlain = stripHtml(currentFront).toLowerCase();
 
                                     keywords.forEach(kw => {
                                         const kwLower = kw.toLowerCase();
+                                        // 排除掉自己，避免無限跳轉
                                         if (kwLower === currentPlain || kw.length < 2) return;
 
-                                        // 正則表達式：確保匹配的是完整詞彙，且不在 HTML 標籤內
+                                        // 轉義正則特殊符號
                                         const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+                                        // 正則：匹配文字且確保不在 HTML 標籤內
                                         const regex = new RegExp(`(${escaped})(?![^<]*>|[^<>]*<\/button>)`, 'g');
 
-                                        // 使用特殊的「Wiki 按鈕」樣式
-                                        html = html.replace(regex, `<button onclick="event.stopPropagation(); jumpToCard('$1')" class="text-blue-600 dark:text-blue-400 underline decoration-dotted font-bold cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/40 px-0.5 rounded-sm m-0 p-0 border-none bg-transparent inline text-left">${kw}</button>`);
+                                        // 生成按鈕：
+                                        // 1. type="button" 絕對必要，防止重載
+                                        // 2. onclick 內使用 this.innerText 抓取當前文字，最精準
+                                        // 3. return false 阻止冒泡
+                                        html = html.replace(regex, `<button type="button" onclick="event.preventDefault(); event.stopPropagation(); window.jumpToCard(this.innerText); return false;" class="text-blue-600 dark:text-blue-400 underline decoration-dotted font-bold cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/40 px-0.5 rounded border-none bg-transparent inline text-left m-0 p-0">$1</button>`);
                                     });
 
                                     element.innerHTML = html;
