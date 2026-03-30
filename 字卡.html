@@ -1045,56 +1045,37 @@
             </div>
 
             <!-- AI Card Section -->
+            <!-- AI Card Section -->
             <div id="aiCardSection" class="space-y-6 hidden">
                 <h2 class="text-2xl font-bold text-purple-700 dark:text-purple-400">✨ AI 智慧出題</h2>
 
-                <!-- AI 出題方框 -->
                 <div class="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-700 p-6 rounded-2xl border border-blue-100 dark:border-gray-600 shadow-sm">
-                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">請貼上地理科課文、新聞稿或任何學習資料，AI 將自動為您提取關鍵概念並生成字卡。</p>
-                    <!-- AI 檔案上傳/拖放區 -->
-                    <div id="aiDropZone" class="mb-4 border-2 border-dashed border-purple-300 dark:border-purple-600 rounded-2xl p-8 text-center bg-white/50 dark:bg-gray-800/50 hover:border-purple-500 transition-all cursor-pointer relative group">
+                    <!-- 檔案拖拽區 -->
+                    <div id="aiDropZone" class="mb-4 border-2 border-dashed border-purple-300 dark:border-purple-600 rounded-2xl p-8 text-center bg-white/50 dark:bg-gray-800/50 hover:border-purple-500 transition-all cursor-pointer relative">
                         <input type="file" id="aiFileInput" class="hidden" accept="image/*,application/pdf">
-
                         <div id="aiUploadPlaceholder">
                             <div class="text-4xl mb-2">📸</div>
-                            <p class="text-sm font-medium text-purple-700 dark:text-purple-400">點擊、拖放檔案 或 直接貼上 (Ctrl+V) 圖片/PDF</p>
-                            <p class="text-xs text-gray-400 mt-1">支援 JPG, PNG, WebP 及 PDF 格式</p>
+                            <p class="text-sm font-medium text-purple-700">點擊或拖放 圖片/PDF 檔案</p>
                         </div>
-
-                        <!-- 檔案預覽區 -->
                         <div id="aiFilePreview" class="hidden flex flex-col items-center">
-                            <div id="aiPreviewContent" class="relative">
-                                <!-- 圖片或 PDF 圖示會顯示在這裡 -->
-                                <button id="removeAiFile" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg">×</button>
-                            </div>
+                            <div id="aiPreviewContent" class="relative"></div>
                             <p id="aiFileName" class="mt-2 text-xs font-medium text-gray-500"></p>
                         </div>
                     </div>
-                    <textarea id="aiInputText" class="w-full p-4 border border-gray-300 dark:border-gray-600 rounded-xl dark:bg-gray-800 text-base mb-4 focus:ring-2 focus:ring-purple-500 outline-none" rows="6" placeholder="例如：貼上關於「全球暖化對香港熱島效應影響」的新聞內容..."></textarea>
+
+                    <textarea id="aiInputText" class="w-full p-4 border border-gray-300 dark:border-gray-600 rounded-xl dark:bg-gray-800 mb-4" rows="4" placeholder="在此輸入補充指令或貼上課文..."></textarea>
 
                     <div class="space-y-4">
-                        <!-- 選擇目標卡組 -->
-                        <div>
-                            <label class="block text-sm font-medium mb-2">1. 選擇生成的字卡要存放的卡組：</label>
-                            <div id="aiDeckSelectionContainer" class="flex flex-wrap gap-2">
-                                <!-- 這裡會動態載入卡組按鈕 -->
-                            </div>
-                        </div>
+                        <label class="block text-sm font-medium">1. 選擇生成的目標卡組：</label>
+                        <div id="aiDeckSelectionContainer" class="flex flex-wrap gap-2"></div>
 
-                        <div class="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-600">
-                            <span class="text-xs text-gray-500">建議內容長度：300-1000 字</span>
-                            <button id="aiGenerateBtn" class="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-xl font-bold transition-all flex items-center shadow-lg active:scale-95">
-                                <span id="aiGenSpinner" class="hidden animate-spin mr-2">⟳</span> 開始 AI 出題
+                        <div class="flex justify-between items-center pt-4 border-t border-gray-200">
+                            <button id="aiGenerateBtn" class="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-xl font-bold transition-all flex items-center">
+                                <!-- 修正：確保這裡有 aiGenSpinner -->
+                                <span id="aiGenSpinner" class="hidden animate-spin mr-2">⟳</span>
+                                開始 AI 出題
                             </button>
                         </div>
-                    </div>
-                </div>
-
-                <!-- 生成結果預覽區 (可選) -->
-                <div id="aiResultPreview" class="hidden space-y-4">
-                    <h3 class="font-bold text-lg text-gray-700 dark:text-gray-300">最新生成的字卡：</h3>
-                    <div id="aiResultList" class="grid grid-cols-1 gap-3">
-                        <!-- AI 生成的內容會顯示在這裡 -->
                     </div>
                 </div>
             </div>
@@ -9284,16 +9265,22 @@
                                 }
 
                                 // 核心 AI 呼叫函數
-                                async function askGeminiMultiModal(prompt, fileData = null) {
-                                    const apiKey = localStorage.getItem('google_api_key');
+                                async function askGeminiMain(prompt, fileData = null) {
+                                    let apiKey = localStorage.getItem('google_api_key');
+
+                                    // 安全檢查：防止使用者誤填網址
+                                    if (apiKey && apiKey.includes('http')) {
+                                        showNotification("API Key 設定錯誤，請填入純字元金鑰而非網址");
+                                        return null;
+                                    }
+
                                     if (!apiKey) {
-                                        showNotification("請先設置 API Key");
+                                        showNotification("請先在數據管理設置 Gemini API Key");
                                         return null;
                                     }
 
                                     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
-                                    // 構建請求內容
                                     const parts = [{ text: prompt }];
                                     if (fileData) {
                                         parts.push({
@@ -9312,82 +9299,84 @@
                                         });
 
                                         const data = await response.json();
-                                        return data.candidates[0].content.parts[0].text;
+
+                                        if (data.error) {
+                                            showNotification("API 錯誤: " + data.error.message);
+                                            return null;
+                                        }
+
+                                        if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+                                            return data.candidates[0].content.parts[0].text;
+                                        } else {
+                                            throw new Error("AI 無法生成內容，請檢查圖片是否清晰或 Key 是否有效");
+                                        }
                                     } catch (error) {
-                                        console.error("AI 辨識失敗:", error);
+                                        console.error("AI 呼叫失敗:", error);
+                                        showNotification("連線失敗: " + error.message);
                                         return null;
                                     }
                                 }
 
                                 // 綁定 AI 解釋按鈕
                                 document.getElementById('aiExplainBtn').addEventListener('click', async (e) => {
-                                    e.stopPropagation(); // 防止翻轉字卡
+                                    e.stopPropagation();
 
                                     const card = cardsToReview[currentCardIndex];
                                     const front = stripHtml(card.frontText);
                                     const back = stripHtml(card.backText);
 
-                                    const explainBtn = document.getElementById('aiExplainBtn');
-                                    explainBtn.innerHTML = '...';
-                                    explainBtn.disabled = true;
+                                    const btn = document.getElementById('aiExplainBtn');
+                                    btn.innerHTML = '...';
+                                    btn.disabled = true;
 
-                                    const prompt = `你是一位專業的地理老師。針對以下字卡內容：
-                                    概念：${front}
-                                    定義：${back}
-                                    請用約 150 字內的白話文解釋這個概念，並舉一個與「香港」或「日常生活」相關的地理例子。請使用繁體中文。`;
+                                    const prompt = `你是一位專業地理老師，請針對這張字卡解釋概念並舉一個香港例子：概念「${front}」，定義「${back}」。請用繁體中文。`;
 
-                                    const result = await askGemini(prompt);
+                                    const result = await askGeminiMain(prompt);
 
                                     if (result) {
-                                        // 使用自定義彈窗顯示結果
+                                        // 彈出顯示結果
                                         const modal = document.createElement('div');
                                         modal.className = 'fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-6';
                                         modal.innerHTML = `
                                             <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl max-w-md w-full shadow-2xl">
                                                 <h4 class="text-blue-600 font-bold mb-2">✨ AI 智慧解釋</h4>
-                                                <div class="text-sm leading-relaxed text-gray-700 dark:text-gray-300 max-h-60 overflow-y-auto mb-4">
-                                                    ${result.replace(/\n/g, '<br>')}
-                                                </div>
+                                                <div class="text-sm leading-relaxed mb-4 max-h-60 overflow-y-auto">${result.replace(/\n/g, '<br>')}</div>
                                                 <button onclick="this.parentElement.parentElement.remove()" class="w-full py-2 bg-gray-200 dark:bg-gray-700 rounded-lg font-bold">關閉</button>
                                             </div>
                                         `;
                                         document.body.appendChild(modal);
                                     }
 
-                                    explainBtn.innerHTML = '<span class="font-bold text-sm">AI</span>';
-                                    explainBtn.disabled = false;
+                                    btn.innerHTML = '<span class="font-bold text-sm">AI</span>';
+                                    btn.disabled = false;
                                 });
 
-                                document.getElementById('aiGenerateBtn').addEventListener('click', async () => {
+                                // --- 3. AI 出題邏輯 (AI 字卡頁面) ---
+                                document.getElementById('aiGenerateBtn').onclick = async () => {
                                     const text = document.getElementById('aiInputText').value.trim();
-
-                                    if (!aiSelectedDeckId) {
-                                        showNotification("請先選擇一個目標卡組");
+                                    if (!aiAttachedFile && !text) {
+                                        showNotification("請提供檔案或文字內容");
                                         return;
                                     }
-                                    if (!text) {
-                                        showNotification("請貼上要分析的內容");
+                                    if (!aiSelectedDeckId) {
+                                        showNotification("請先選擇目標卡組");
                                         return;
                                     }
 
                                     const btn = document.getElementById('aiGenerateBtn');
                                     const spinner = document.getElementById('aiGenSpinner');
+
                                     btn.disabled = true;
-                                    spinner.classList.remove('hidden');
+                                    if(spinner) spinner.classList.remove('hidden');
 
-                                    const prompt = `你是一位專業的地理老師。請閱讀以下資料並生成 3 到 5 組字卡。
-                                    資料內容："${text}"
-                                    格式要求：只需返回一個 JSON 陣列，不要有 Markdown 代碼塊標記。
-                                    範例格式：[{"front": "概念名稱", "back": "詳細定義或解釋"}]`;
+                                    const prompt = `你是一位專業地理老師，請分析內容並生成 3-5 組字卡。只需回傳 JSON 陣列格式：[{"front": "概念", "back": "定義"}]。內容：${text}`;
 
-                                    const result = await askGemini(prompt);
+                                    const result = await askGeminiMain(prompt, aiAttachedFile);
 
                                     if (result) {
                                         try {
-                                            // 清理可能的 Markdown 標記
                                             const cleanJson = result.replace(/```json|```/g, "").trim();
                                             const cards = JSON.parse(cleanJson);
-
                                             const targetDeck = decksData.find(d => d.id === aiSelectedDeckId);
 
                                             cards.forEach(c => {
@@ -9395,18 +9384,19 @@
                                                 targetDeck.cardIds.push(id);
                                             });
 
-                                            showNotification(`成功為「${targetDeck.name}」生成 ${cards.length} 張字卡！`);
+                                            showNotification(`成功生成 ${cards.length} 張字卡！`);
+                                            if (typeof clearAiFile === 'function') clearAiFile();
                                             document.getElementById('aiInputText').value = '';
                                             saveDataToLocalStorage();
                                         } catch (e) {
-                                            console.error("AI 解析失敗", result);
-                                            showNotification("AI 回傳格式不正確，請再試一次");
+                                            console.error("解析失敗:", result);
+                                            showNotification("AI 回傳格式錯誤，請再試一次");
                                         }
                                     }
 
                                     btn.disabled = false;
-                                    spinner.classList.add('hidden');
-                                });
+                                    if(spinner) spinner.classList.add('hidden');
+                                };
 
                                 let aiSelectedDeckId = null;
 
