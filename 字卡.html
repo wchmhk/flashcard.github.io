@@ -9535,52 +9535,66 @@
                                     }
                                 });
 
-                                document.getElementById('aiGenerateBtn').onclick = async () => {
-                                    const text = document.getElementById('aiInputText').value.trim();
-                                    if (!aiAttachedFile && !text) {
-                                        showNotification("請提供檔案或輸入文字內容");
-                                        return;
-                                    }
-                                    if (!aiSelectedDeckId) {
-                                        showNotification("請先選擇目標卡組");
-                                        return;
-                                    }
+                                // --- AI 出題按鈕邏輯 (加強 JSON 解析版) ---
+                                                                document.getElementById('aiGenerateBtn').onclick = async () => {
+                                                                    const text = document.getElementById('aiInputText').value.trim();
+                                                                    if (!aiAttachedFile && !text) {
+                                                                        showNotification("請提供檔案或輸入文字內容");
+                                                                        return;
+                                                                    }
+                                                                    if (!aiSelectedDeckId) {
+                                                                        showNotification("請先選擇目標卡組");
+                                                                        return;
+                                                                    }
 
-                                    const btn = document.getElementById('aiGenerateBtn');
-                                    btn.disabled = true;
-                                    btn.innerHTML = 'AI 辨識中...';
+                                                                    const btn = document.getElementById('aiGenerateBtn');
+                                                                    btn.disabled = true;
+                                                                    btn.innerHTML = 'AI 辨識中...';
 
-                                    // 根據是否有檔案調整提示詞
-                                    const prompt = `你是一位專業的地理老師。請分析所提供的${aiAttachedFile ? '檔案內容' : '文字內容'}。
-                                    如果是地圖，請提取重要的地理特徵；如果是課文，請提取關鍵概念。
-                                    請生成 3 到 5 組字卡。
-                                    格式要求：只需返回一個 JSON 陣列 [ {"front": "...", "back": "..."} ]`;
+                                                                    // 強化提示詞，要求 AI 嚴格遵守格式
+                                                                    const prompt = `你是一位專業的地理老師。請分析所提供的${aiAttachedFile ? '檔案內容' : '文字內容'}。
+                                                                    如果是地圖，請提取重要的地理特徵；如果是課文，請提取關鍵概念。
+                                                                    請生成 3 到 5 組字卡。
+                                                                    格式要求：絕對只能返回一個 JSON 陣列，格式為[{"front": "概念...", "back": "定義..."}]。不要輸出任何 Markdown 標記 (如 \`\`\`json)，也不要輸出任何解釋或問候文字！
+                                                                    補充指令：${text}`;
 
-                                    const result = await askGeminiMain(prompt, aiAttachedFile);
+                                                                    const result = await askGeminiMain(prompt, aiAttachedFile);
 
-                                    if (result) {
-                                        try {
-                                            const cleanJson = result.replace(/```json|```/g, "").trim();
-                                            const cards = JSON.parse(cleanJson);
-                                            const targetDeck = decksData.find(d => d.id === aiSelectedDeckId);
+                                                                    if (result) {
+                                                                        try {
+                                                                            // 強化 JSON 擷取邏輯：強制只取第一個 '[' 到最後一個 ']' 之間的內容
+                                                                            let cleanJson = result;
+                                                                            const startIndex = cleanJson.indexOf('[');
+                                                                            const endIndex = cleanJson.lastIndexOf(']');
 
-                                            cards.forEach(c => {
-                                                const id = addNewCard(`<p>${c.front}</p>`, null, `<p>${c.back}</p>`, null);
-                                                targetDeck.cardIds.push(id);
-                                            });
+                                                                            if (startIndex !== -1 && endIndex !== -1) {
+                                                                                cleanJson = cleanJson.substring(startIndex, endIndex + 1);
+                                                                            } else {
+                                                                                throw new Error("無法在 AI 回覆中找到 JSON 陣列符號 '[' 或 ']'");
+                                                                            }
 
-                                            showNotification(`成功識辨並生成 ${cards.length} 張字卡！`);
-                                            clearAiFile(); // 生成後清空檔案
-                                            document.getElementById('aiInputText').value = '';
-                                            saveDataToLocalStorage();
-                                        } catch (e) {
-                                            showNotification("AI 格式錯誤，請再試一次");
-                                        }
-                                    }
+                                                                            const cards = JSON.parse(cleanJson);
+                                                                            const targetDeck = decksData.find(d => d.id === aiSelectedDeckId);
 
-                                    btn.disabled = false;
-                                    btn.innerHTML = '開始 AI 出題';
-                                };
+                                                                            cards.forEach(c => {
+                                                                                const id = addNewCard(`<p>${c.front}</p>`, null, `<p>${c.back}</p>`, null);
+                                                                                targetDeck.cardIds.push(id);
+                                                                            });
+
+                                                                            showNotification(`成功識辨並生成 ${cards.length} 張字卡！`);
+                                                                            clearAiFile(); // 生成後清空檔案
+                                                                            document.getElementById('aiInputText').value = '';
+                                                                            saveDataToLocalStorage();
+                                                                        } catch (e) {
+                                                                            console.error("AI 格式解析錯誤。原始回傳內容為:\n", result);
+                                                                            console.error("錯誤細節:", e);
+                                                                            showNotification("AI 格式錯誤，請再試一次");
+                                                                        }
+                                                                    }
+
+                                                                    btn.disabled = false;
+                                                                    btn.innerHTML = '開始 AI 出題';
+                                                                };
 
                             </script>
                         </body>
