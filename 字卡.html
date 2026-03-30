@@ -9354,48 +9354,63 @@
                                 // --- 3. AI 出題邏輯 (AI 字卡頁面) ---
                                 document.getElementById('aiGenerateBtn').onclick = async () => {
                                     const text = document.getElementById('aiInputText').value.trim();
+
+                                    // 安全檢查
                                     if (!aiAttachedFile && !text) {
-                                        showNotification("請提供檔案或文字內容");
+                                        showNotification("請提供檔案或貼上內容");
                                         return;
                                     }
                                     if (!aiSelectedDeckId) {
-                                        showNotification("請先選擇目標卡組");
+                                        showNotification("請先選擇一個目標卡組");
                                         return;
                                     }
 
                                     const btn = document.getElementById('aiGenerateBtn');
                                     const spinner = document.getElementById('aiGenSpinner');
 
+                                    // 防止重複點擊
                                     btn.disabled = true;
-                                    if(spinner) spinner.classList.remove('hidden');
+                                    if (spinner) spinner.classList.remove('hidden');
 
-                                    const prompt = `你是一位專業地理老師，請分析內容並生成 3-5 組字卡。只需回傳 JSON 陣列格式：[{"front": "概念", "back": "定義"}]。內容：${text}`;
+                                    // 根據是否有檔案來撰寫不同的提示詞
+                                    const fileHint = aiAttachedFile ? "請先讀取並辨識所提供的圖片/PDF 檔案內容，" : "";
+                                    const prompt = `你是一位專業地理老師，${fileHint}分析內容並生成 3-5 組字卡。只需回傳 JSON 陣列格式，不要包含任何 Markdown 標記或額外文字。格式：[{"front": "概念名稱", "back": "詳細定義"}]。補充指令：${text}`;
 
+                                    // --- 關鍵修正：確保這裡呼叫的是 askGeminiMain ---
                                     const result = await askGeminiMain(prompt, aiAttachedFile);
 
                                     if (result) {
                                         try {
+                                            // 清理 AI 可能帶有的 Markdown 代碼塊標記
                                             const cleanJson = result.replace(/```json|```/g, "").trim();
                                             const cards = JSON.parse(cleanJson);
+
                                             const targetDeck = decksData.find(d => d.id === aiSelectedDeckId);
+                                            if (!targetDeck) throw new Error("找不到目標卡組");
 
                                             cards.forEach(c => {
+                                                // 建立字卡並存入卡組
                                                 const id = addNewCard(`<p>${c.front}</p>`, null, `<p>${c.back}</p>`, null);
                                                 targetDeck.cardIds.push(id);
                                             });
 
                                             showNotification(`成功生成 ${cards.length} 張字卡！`);
+
+                                            // 成功後重置輸入
                                             if (typeof clearAiFile === 'function') clearAiFile();
                                             document.getElementById('aiInputText').value = '';
+
+                                            // 儲存到本地
                                             saveDataToLocalStorage();
+                                            loadAllCards(); // 重新整理字卡管理介面
                                         } catch (e) {
-                                            console.error("解析失敗:", result);
-                                            showNotification("AI 回傳格式錯誤，請再試一次");
+                                            console.error("解析失敗，AI 回傳內容:", result);
+                                            showNotification("AI 回傳格式不正確，請再試一次");
                                         }
                                     }
 
                                     btn.disabled = false;
-                                    if(spinner) spinner.classList.add('hidden');
+                                    if (spinner) spinner.classList.add('hidden');
                                 };
 
                                 let aiSelectedDeckId = null;
@@ -9437,7 +9452,6 @@
                                 async function handleAiFile(file) {
                                     if (!file) return;
 
-                                    // 檢查格式
                                     const isImage = file.type.startsWith('image/');
                                     const isPDF = file.type === 'application/pdf';
 
@@ -9446,22 +9460,37 @@
                                         return;
                                     }
 
-                                    aiAttachedFile = {
-                                        mime_type: file.type,
-                                        data: await fileToBase64(file)
+                                    // 將檔案轉為 Base64
+                                    const reader = new FileReader();
+                                    reader.onload = () => {
+                                        aiAttachedFile = {
+                                            mime_type: file.type,
+                                            data: reader.result.split(',')[1]
+                                        };
+
+                                        // 更新 UI 預覽
+                                        document.getElementById('aiUploadPlaceholder').classList.add('hidden');
+                                        const preview = document.getElementById('aiFilePreview');
+                                        preview.classList.remove('hidden');
+                                        document.getElementById('aiFileName').textContent = file.name;
+
+                                        const content = document.getElementById('aiPreviewContent');
+                                        if (isImage) {
+                                            content.innerHTML = `<img src="data:${file.type};base64,${aiAttachedFile.data}" class="max-h-40 rounded shadow-md">`;
+                                        } else {
+                                            content.innerHTML = `<div class="p-4 bg-red-100 rounded text-red-700 font-bold">PDF 檔案已載入</div>`;
+                                        }
+                                        // 加入刪除按鈕
+                                        content.innerHTML += `<button onclick="clearAiFile()" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6">×</button>`;
                                     };
+                                    reader.readAsDataURL(file);
+                                }
 
-                                    // UI 更新
-                                    document.getElementById('aiUploadPlaceholder').classList.add('hidden');
-                                    document.getElementById('aiFilePreview').classList.remove('hidden');
-                                    document.getElementById('aiFileName').textContent = file.name;
-
-                                    const previewContainer = document.getElementById('aiPreviewContent');
-                                    if (isImage) {
-                                        previewContainer.innerHTML = `<img src="data:${file.type};base64,${aiAttachedFile.data}" class="max-h-40 rounded-lg shadow-md"><button id="removeAiFile" onclick="clearAiFile()" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg">×</button>`;
-                                    } else {
-                                        previewContainer.innerHTML = `<div class="w-32 h-40 bg-red-100 dark:bg-red-900/30 flex flex-col items-center justify-center rounded-lg border border-red-200"><span class="text-4xl mb-2">📄</span><span class="text-xs font-bold text-red-700">PDF</span></div><button id="removeAiFile" onclick="clearAiFile()" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg">×</button>`;
-                                    }
+                                function clearAiFile() {
+                                    aiAttachedFile = null;
+                                    document.getElementById('aiFileInput').value = '';
+                                    document.getElementById('aiUploadPlaceholder').classList.remove('hidden');
+                                    document.getElementById('aiFilePreview').classList.add('hidden');
                                 }
 
                                 function clearAiFile() {
@@ -9515,7 +9544,7 @@
                                     請生成 3 到 5 組字卡。
                                     格式要求：只需返回一個 JSON 陣列 [ {"front": "...", "back": "..."} ]`;
 
-                                    const result = await askGeminiMultiModal(prompt, aiAttachedFile);
+                                    const result = await askGeminiMain(prompt, aiAttachedFile);
 
                                     if (result) {
                                         try {
