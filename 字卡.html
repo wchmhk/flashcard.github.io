@@ -720,6 +720,14 @@
                     </a>
                 </li>
                 <li>
+                    <a href="#" data-section="aiCard" class="flex items-center p-2 text-gray-900 rounded-lg dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 group">
+                        <svg class="flex-shrink-0 w-5 h-5 text-purple-500 transition duration-75 group-hover:text-gray-900 dark:group-hover:text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"></path>
+                        </svg>
+                        <span class="ms-3">AI 字卡</span>
+                    </a>
+                </li>
+                <li>
                     <a href="#" data-section="manageDeck" class="flex items-center p-2 text-gray-900 rounded-lg dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 group">
                          <svg class="flex-shrink-0 w-5 h-5 text-gray-500 transition duration-75 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 18"><path d="M18 0H2a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2ZM9 15a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm1-4a1 1 0 0 1-2 0V6a1 1 0 0 1 2 0v5Z"/></svg>
                         <span class="ms-3">管理卡組</span>
@@ -888,6 +896,12 @@
                                 <div id="backText"></div>
                                 <div id="backImage"></div>
                             </div>
+                            <!-- AI 智慧解釋按鈕 -->
+                            <button id="aiExplainBtn" class="absolute bottom-4 right-4 w-12 h-12 bg-gradient-to-tr from-purple-600 to-blue-500 text-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform z-20 group" title="AI 智慧解釋">
+                                <span class="font-bold text-sm">AI</span>
+                                <!-- 懸浮提示 -->
+                                <span class="absolute bottom-full mb-2 hidden group-hover:block bg-black text-white text-xs p-2 rounded whitespace-nowrap">點擊獲取詳解與例子</span>
+                            </button>
                         </div>
 
                         <div class="text-center mb-4">
@@ -1028,6 +1042,61 @@
                     </div>
                   </div>
                 </form>
+            </div>
+
+            <!-- AI Card Section -->
+            <div id="aiCardSection" class="space-y-6 hidden">
+                <h2 class="text-2xl font-bold text-purple-700 dark:text-purple-400">✨ AI 智慧出題</h2>
+
+                <!-- AI 出題方框 -->
+                <div class="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-700 p-6 rounded-2xl border border-blue-100 dark:border-gray-600 shadow-sm">
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">請貼上地理科課文、新聞稿或任何學習資料，AI 將自動為您提取關鍵概念並生成字卡。</p>
+                    <!-- AI 檔案上傳/拖放區 -->
+                    <div id="aiDropZone" class="mb-4 border-2 border-dashed border-purple-300 dark:border-purple-600 rounded-2xl p-8 text-center bg-white/50 dark:bg-gray-800/50 hover:border-purple-500 transition-all cursor-pointer relative group">
+                        <input type="file" id="aiFileInput" class="hidden" accept="image/*,application/pdf">
+
+                        <div id="aiUploadPlaceholder">
+                            <div class="text-4xl mb-2">📸</div>
+                            <p class="text-sm font-medium text-purple-700 dark:text-purple-400">點擊、拖放檔案 或 直接貼上 (Ctrl+V) 圖片/PDF</p>
+                            <p class="text-xs text-gray-400 mt-1">支援 JPG, PNG, WebP 及 PDF 格式</p>
+                        </div>
+
+                        <!-- 檔案預覽區 -->
+                        <div id="aiFilePreview" class="hidden flex flex-col items-center">
+                            <div id="aiPreviewContent" class="relative">
+                                <!-- 圖片或 PDF 圖示會顯示在這裡 -->
+                                <button id="removeAiFile" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg">×</button>
+                            </div>
+                            <p id="aiFileName" class="mt-2 text-xs font-medium text-gray-500"></p>
+                        </div>
+                    </div>
+                    <textarea id="aiInputText" class="w-full p-4 border border-gray-300 dark:border-gray-600 rounded-xl dark:bg-gray-800 text-base mb-4 focus:ring-2 focus:ring-purple-500 outline-none" rows="6" placeholder="例如：貼上關於「全球暖化對香港熱島效應影響」的新聞內容..."></textarea>
+
+                    <div class="space-y-4">
+                        <!-- 選擇目標卡組 -->
+                        <div>
+                            <label class="block text-sm font-medium mb-2">1. 選擇生成的字卡要存放的卡組：</label>
+                            <div id="aiDeckSelectionContainer" class="flex flex-wrap gap-2">
+                                <!-- 這裡會動態載入卡組按鈕 -->
+                            </div>
+                        </div>
+
+                        <div class="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-600">
+                            <span class="text-xs text-gray-500">建議內容長度：300-1000 字</span>
+                            <button id="aiGenerateBtn" class="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-xl font-bold transition-all flex items-center shadow-lg active:scale-95">
+                                <span id="aiGenSpinner" class="hidden animate-spin mr-2">⟳</span> 開始 AI 出題
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 生成結果預覽區 (可選) -->
+                <div id="aiResultPreview" class="hidden space-y-4">
+                    <h3 class="font-bold text-lg text-gray-700 dark:text-gray-300">最新生成的字卡：</h3>
+                    <div id="aiResultList" class="grid grid-cols-1 gap-3">
+                        <!-- AI 生成的內容會顯示在這裡 -->
+                    </div>
+                </div>
             </div>
 
             <!-- Manage cards section -->
@@ -8689,6 +8758,21 @@
                                             link.classList.add('text-gray-900', 'dark:text-white', 'hover:bg-gray-100', 'dark:hover:bg-gray-700');
                                         });
 
+                                        // 隱藏所有頁面
+                                        const sections = ['reviewSection', 'createCardSection', 'manageCardSection', 'manageDeckSection', 'keyConceptsSection', 'dataManagementSection', 'aiCardSection'];
+                                        sections.forEach(s => {
+                                            const el = document.getElementById(s);
+                                            if (el) el.classList.add('hidden');
+                                        });
+
+                                        // 顯示目標頁面
+                                        if (section === 'aiCard') {
+                                            document.getElementById('aiCardSection').classList.remove('hidden');
+                                            loadAiDeckOptions(); // 載入 AI 頁面專用的卡組選擇
+                                        } else {
+                                            document.getElementById(section + 'Section').classList.remove('hidden');
+                                        }
+
                                         // 為當前點擊的連結添加 active 樣式
                                         const activeLink = document.querySelector(`#sidebar-nav a[data-section="${section}"]`);
                                         if (activeLink) {
@@ -9198,6 +9282,274 @@
                                         tagList.appendChild(btn);
                                     });
                                 }
+
+                                // 核心 AI 呼叫函數
+                                async function askGeminiMultiModal(prompt, fileData = null) {
+                                    const apiKey = localStorage.getItem('google_api_key');
+                                    if (!apiKey) {
+                                        showNotification("請先設置 API Key");
+                                        return null;
+                                    }
+
+                                    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+                                    // 構建請求內容
+                                    const parts = [{ text: prompt }];
+                                    if (fileData) {
+                                        parts.push({
+                                            inline_data: {
+                                                mime_type: fileData.mime_type,
+                                                data: fileData.data
+                                            }
+                                        });
+                                    }
+
+                                    try {
+                                        const response = await fetch(url, {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ contents: [{ parts }] })
+                                        });
+
+                                        const data = await response.json();
+                                        return data.candidates[0].content.parts[0].text;
+                                    } catch (error) {
+                                        console.error("AI 辨識失敗:", error);
+                                        return null;
+                                    }
+                                }
+
+                                // 綁定 AI 解釋按鈕
+                                document.getElementById('aiExplainBtn').addEventListener('click', async (e) => {
+                                    e.stopPropagation(); // 防止翻轉字卡
+
+                                    const card = cardsToReview[currentCardIndex];
+                                    const front = stripHtml(card.frontText);
+                                    const back = stripHtml(card.backText);
+
+                                    const explainBtn = document.getElementById('aiExplainBtn');
+                                    explainBtn.innerHTML = '...';
+                                    explainBtn.disabled = true;
+
+                                    const prompt = `你是一位專業的地理老師。針對以下字卡內容：
+                                    概念：${front}
+                                    定義：${back}
+                                    請用約 150 字內的白話文解釋這個概念，並舉一個與「香港」或「日常生活」相關的地理例子。請使用繁體中文。`;
+
+                                    const result = await askGemini(prompt);
+
+                                    if (result) {
+                                        // 使用自定義彈窗顯示結果
+                                        const modal = document.createElement('div');
+                                        modal.className = 'fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-6';
+                                        modal.innerHTML = `
+                                            <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl max-w-md w-full shadow-2xl">
+                                                <h4 class="text-blue-600 font-bold mb-2">✨ AI 智慧解釋</h4>
+                                                <div class="text-sm leading-relaxed text-gray-700 dark:text-gray-300 max-h-60 overflow-y-auto mb-4">
+                                                    ${result.replace(/\n/g, '<br>')}
+                                                </div>
+                                                <button onclick="this.parentElement.parentElement.remove()" class="w-full py-2 bg-gray-200 dark:bg-gray-700 rounded-lg font-bold">關閉</button>
+                                            </div>
+                                        `;
+                                        document.body.appendChild(modal);
+                                    }
+
+                                    explainBtn.innerHTML = '<span class="font-bold text-sm">AI</span>';
+                                    explainBtn.disabled = false;
+                                });
+
+                                document.getElementById('aiGenerateBtn').addEventListener('click', async () => {
+                                    const text = document.getElementById('aiInputText').value.trim();
+
+                                    if (!aiSelectedDeckId) {
+                                        showNotification("請先選擇一個目標卡組");
+                                        return;
+                                    }
+                                    if (!text) {
+                                        showNotification("請貼上要分析的內容");
+                                        return;
+                                    }
+
+                                    const btn = document.getElementById('aiGenerateBtn');
+                                    const spinner = document.getElementById('aiGenSpinner');
+                                    btn.disabled = true;
+                                    spinner.classList.remove('hidden');
+
+                                    const prompt = `你是一位專業的地理老師。請閱讀以下資料並生成 3 到 5 組字卡。
+                                    資料內容："${text}"
+                                    格式要求：只需返回一個 JSON 陣列，不要有 Markdown 代碼塊標記。
+                                    範例格式：[{"front": "概念名稱", "back": "詳細定義或解釋"}]`;
+
+                                    const result = await askGemini(prompt);
+
+                                    if (result) {
+                                        try {
+                                            // 清理可能的 Markdown 標記
+                                            const cleanJson = result.replace(/```json|```/g, "").trim();
+                                            const cards = JSON.parse(cleanJson);
+
+                                            const targetDeck = decksData.find(d => d.id === aiSelectedDeckId);
+
+                                            cards.forEach(c => {
+                                                const id = addNewCard(`<p>${c.front}</p>`, null, `<p>${c.back}</p>`, null);
+                                                targetDeck.cardIds.push(id);
+                                            });
+
+                                            showNotification(`成功為「${targetDeck.name}」生成 ${cards.length} 張字卡！`);
+                                            document.getElementById('aiInputText').value = '';
+                                            saveDataToLocalStorage();
+                                        } catch (e) {
+                                            console.error("AI 解析失敗", result);
+                                            showNotification("AI 回傳格式不正確，請再試一次");
+                                        }
+                                    }
+
+                                    btn.disabled = false;
+                                    spinner.classList.add('hidden');
+                                });
+
+                                let aiSelectedDeckId = null;
+
+                                function loadAiDeckOptions() {
+                                    const container = document.getElementById('aiDeckSelectionContainer');
+                                    container.innerHTML = '';
+
+                                    if (decksData.length === 0) {
+                                        container.innerHTML = '<p class="text-red-500 text-sm">尚未建立卡組，請先前往「管理卡組」建立一個。</p>';
+                                        return;
+                                    }
+
+                                    decksData.forEach(deck => {
+                                        const btn = document.createElement('button');
+                                        btn.textContent = deck.name;
+                                        btn.className = `px-3 py-1.5 rounded-full border text-sm transition-colors ${aiSelectedDeckId === deck.id ? 'bg-purple-600 text-white border-purple-600' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600'}`;
+                                        btn.onclick = () => {
+                                            aiSelectedDeckId = deck.id;
+                                            loadAiDeckOptions(); // 重新渲染樣式
+                                        };
+                                        container.appendChild(btn);
+                                    });
+                                }
+
+                                let aiAttachedFile = null; // 儲存待處理的檔案數據 {mime_type, data}
+
+                                // 處理檔案轉換為 Base64
+                                function fileToBase64(file) {
+                                    return new Promise((resolve, reject) => {
+                                        const reader = new FileReader();
+                                        reader.onload = () => resolve(reader.result.split(',')[1]);
+                                        reader.onerror = reject;
+                                        reader.readAsDataURL(file);
+                                    });
+                                }
+
+                                // 顯示預覽
+                                async function handleAiFile(file) {
+                                    if (!file) return;
+
+                                    // 檢查格式
+                                    const isImage = file.type.startsWith('image/');
+                                    const isPDF = file.type === 'application/pdf';
+
+                                    if (!isImage && !isPDF) {
+                                        showNotification("僅支援圖片或 PDF 檔案");
+                                        return;
+                                    }
+
+                                    aiAttachedFile = {
+                                        mime_type: file.type,
+                                        data: await fileToBase64(file)
+                                    };
+
+                                    // UI 更新
+                                    document.getElementById('aiUploadPlaceholder').classList.add('hidden');
+                                    document.getElementById('aiFilePreview').classList.remove('hidden');
+                                    document.getElementById('aiFileName').textContent = file.name;
+
+                                    const previewContainer = document.getElementById('aiPreviewContent');
+                                    if (isImage) {
+                                        previewContainer.innerHTML = `<img src="data:${file.type};base64,${aiAttachedFile.data}" class="max-h-40 rounded-lg shadow-md"><button id="removeAiFile" onclick="clearAiFile()" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg">×</button>`;
+                                    } else {
+                                        previewContainer.innerHTML = `<div class="w-32 h-40 bg-red-100 dark:bg-red-900/30 flex flex-col items-center justify-center rounded-lg border border-red-200"><span class="text-4xl mb-2">📄</span><span class="text-xs font-bold text-red-700">PDF</span></div><button id="removeAiFile" onclick="clearAiFile()" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg">×</button>`;
+                                    }
+                                }
+
+                                function clearAiFile() {
+                                    aiAttachedFile = null;
+                                    document.getElementById('aiFileInput').value = '';
+                                    document.getElementById('aiUploadPlaceholder').classList.remove('hidden');
+                                    document.getElementById('aiFilePreview').classList.add('hidden');
+                                }
+
+                                // 點擊上傳
+                                document.getElementById('aiDropZone').onclick = () => document.getElementById('aiFileInput').click();
+                                document.getElementById('aiFileInput').onchange = (e) => handleAiFile(e.target.files[0]);
+
+                                // 拖放上傳
+                                const dropZone = document.getElementById('aiDropZone');
+                                dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add('border-purple-500', 'bg-purple-50'); };
+                                dropZone.ondragleave = () => { dropZone.classList.remove('border-purple-500', 'bg-purple-50'); };
+                                dropZone.ondrop = (e) => {
+                                    e.preventDefault();
+                                    dropZone.classList.remove('border-purple-500', 'bg-purple-50');
+                                    handleAiFile(e.dataTransfer.files[0]);
+                                };
+
+                                // 貼上上傳 (Ctrl+V)
+                                document.addEventListener('paste', (e) => {
+                                    if (document.getElementById('aiCardSection').classList.contains('hidden')) return;
+                                    const item = e.clipboardData.items[0];
+                                    if (item && item.type.startsWith('image/')) {
+                                        handleAiFile(item.getAsFile());
+                                    }
+                                });
+
+                                document.getElementById('aiGenerateBtn').onclick = async () => {
+                                    const text = document.getElementById('aiInputText').value.trim();
+                                    if (!aiAttachedFile && !text) {
+                                        showNotification("請提供檔案或輸入文字內容");
+                                        return;
+                                    }
+                                    if (!aiSelectedDeckId) {
+                                        showNotification("請先選擇目標卡組");
+                                        return;
+                                    }
+
+                                    const btn = document.getElementById('aiGenerateBtn');
+                                    btn.disabled = true;
+                                    btn.innerHTML = 'AI 辨識中...';
+
+                                    // 根據是否有檔案調整提示詞
+                                    const prompt = `你是一位專業的地理老師。請分析所提供的${aiAttachedFile ? '檔案內容' : '文字內容'}。
+                                    如果是地圖，請提取重要的地理特徵；如果是課文，請提取關鍵概念。
+                                    請生成 3 到 5 組字卡。
+                                    格式要求：只需返回一個 JSON 陣列 [ {"front": "...", "back": "..."} ]`;
+
+                                    const result = await askGeminiMultiModal(prompt, aiAttachedFile);
+
+                                    if (result) {
+                                        try {
+                                            const cleanJson = result.replace(/```json|```/g, "").trim();
+                                            const cards = JSON.parse(cleanJson);
+                                            const targetDeck = decksData.find(d => d.id === aiSelectedDeckId);
+
+                                            cards.forEach(c => {
+                                                const id = addNewCard(`<p>${c.front}</p>`, null, `<p>${c.back}</p>`, null);
+                                                targetDeck.cardIds.push(id);
+                                            });
+
+                                            showNotification(`成功識辨並生成 ${cards.length} 張字卡！`);
+                                            clearAiFile(); // 生成後清空檔案
+                                            document.getElementById('aiInputText').value = '';
+                                            saveDataToLocalStorage();
+                                        } catch (e) {
+                                            showNotification("AI 格式錯誤，請再試一次");
+                                        }
+                                    }
+
+                                    btn.disabled = false;
+                                    btn.innerHTML = '開始 AI 出題';
+                                };
 
                             </script>
                         </body>
