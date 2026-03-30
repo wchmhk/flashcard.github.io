@@ -2441,26 +2441,17 @@
         // 使用 CSV 方式載入 Google Sheets 數據（無格式備援方案）
         function loadGSheetsDataWithCSV(spreadsheetId, gSheetsUrl, enableSync, loadBtn, originalText) {
             const exportUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv`;
-            console.log('API 失效，嘗試使用 CSV 備援方案載入:', exportUrl);
-
             return new Promise((resolve, reject) => {
-                fetch(exportUrl, {
-                    method: 'GET',
-                    credentials: 'omit',
-                    mode: 'cors',
-                    cache: 'no-cache'
-                })
+                fetch(exportUrl, { method: 'GET', credentials: 'omit', mode: 'cors' })
                 .then(response => {
-                    if (!response.ok) throw new Error(`無法直接訪問表格，請確認該試算表已設定為「知道連結的人均可檢視」`);
+                    if (!response.ok) throw new Error(`無法存取，請確認試算表已設為「知道連結的人均可檢視」`);
                     return response.text();
                 })
                 .then(csvData => {
                     const parsedData = parseCSV(csvData);
-                    if (parsedData.length < 2) throw new Error("表格內沒有足夠的數據（至少需要兩行）");
+                    // 抓取試算表的名稱作為卡組名（預設為 GoogleSheet）
+                    const sheetName = "地理概念匯入";
 
-                    const sheetName = 'GoogleSheet_Import';
-
-                    // 重置全域變數，確保 processSheetsIntoCardsAndDecks 能抓到資料
                     excelSheets = {};
                     excelSheets[sheetName] = {
                         data: parsedData,
@@ -2469,55 +2460,26 @@
                         isGSheet: true
                     };
 
-                    // 設定預設的欄位映射（第 0 欄為正面，第 1 欄為背面）
-                    sheetMappings = {};
                     sheetMappings[sheetName] = {
                         deckOption: 'new',
                         deckId: '',
-                        newDeckName: 'Google Sheets 導入',
-                        newDeckDescription: '從 Google Sheets 自動同步的內容'
+                        newDeckName: sheetName,
+                        newDeckDescription: '從 Google Sheets 同步'
                     };
 
-                    sheetOptions = {};
+                    // 【設定欄位】正面:B(1), 背面:C(2)
                     sheetOptions[sheetName] = {
-                        frontColumn: 0,
-                        backColumn: 1
+                        frontColumn: 1,
+                        backColumn: 2
                     };
 
                     activeSheetName = sheetName;
-
-                    if (enableSync) {
-                        window.gSheetsSyncData = {
-                            url: gSheetsUrl,
-                            spreadsheetId: spreadsheetId,
-                            lastSync: Date.now(),
-                            syncEnabled: true,
-                            useFormatting: false
-                        };
-                    }
-
-                    // 執行資料轉換
                     processSheetsIntoCardsAndDecks();
                     refreshAllViews();
                     saveDataToLocalStorage();
-
-                    if (loadBtn) {
-                        loadBtn.disabled = false;
-                        loadBtn.textContent = originalText || '載入';
-                    }
-
-                    showNotification('成功透過 CSV 載入資料（純文字）');
                     resolve();
                 })
-                .catch(error => {
-                    console.error('CSV 載入錯誤:', error);
-                    showNotification(`載入失敗: ${error.message}`);
-                    if (loadBtn) {
-                        loadBtn.disabled = false;
-                        loadBtn.textContent = originalText || '載入';
-                    }
-                    reject(error);
-                });
+                .catch(error => { reject(error); });
             });
         }
 
@@ -8875,96 +8837,47 @@
                                 function displaySheetConcepts(sheetName, searchText = '') {
                                     const contentContainer = document.getElementById('keyConceptsContent');
                                     contentContainer.innerHTML = '';
-
                                     const sheet = excelSheets[sheetName];
-                                    if (!sheet || !sheet.data || sheet.data.length < 2) {
-                                        contentContainer.innerHTML = '<p class="text-gray-500 dark:text-gray-400">此工作表無內容。</p>';
-                                        return;
-                                    }
+                                    if (!sheet) return;
 
-                                    let conceptRows = sheet.data.slice(1);
-                                    const lowerSearchText = searchText.trim().toLowerCase();
+                                    // 我們需要從 cardsData 中抓取該卡組的資料
+                                    const targetDeck = decksData.find(d => d.name === sheetName);
+                                    if (!targetDeck) return;
 
-                                    if (lowerSearchText) {
-                                        conceptRows = conceptRows.filter(row => {
-                                            const conceptText = getCellTextContent(row[0]).toLowerCase();
-                                            const definitionText = getCellTextContent(row[1]).toLowerCase();
-                                            const extraInfoText = row.length > 2 ? getCellTextContent(row[2]).toLowerCase() : '';
-                                            return conceptText.includes(lowerSearchText) || definitionText.includes(lowerSearchText) || extraInfoText.includes(lowerSearchText);
-                                        });
-                                    }
+                                    targetDeck.cardIds.forEach(cardId => {
+                                        const card = cardsData.find(c => c.id === cardId);
+                                        if (!card) return;
 
-                                    let itemsDisplayed = 0;
-
-                                    conceptRows.forEach(row => {
-                                        const conceptCell = row[0];
-                                        const definitionCell = row[1];
-                                        const extraInfoCell = row.length > 2 ? row[2] : null;
-
-                                        if (!getCellTextContent(conceptCell).trim() && !getCellTextContent(definitionCell).trim()) {
-                                            return;
-                                        }
-
-                                        itemsDisplayed++;
+                                        // 搜尋過濾
+                                        if (searchText && !stripHtml(card.frontText + card.backText).toLowerCase().includes(searchText.toLowerCase())) return;
 
                                         const detailsEl = document.createElement('details');
-                                        detailsEl.className = 'bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm group';
+                                        detailsEl.className = 'bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm group mb-3';
 
+                                        // 標題顯示 B 欄
                                         const summaryEl = document.createElement('summary');
                                         summaryEl.className = 'font-medium text-lg list-none cursor-pointer flex justify-between items-center';
-
-                                        const conceptContent = renderMixedContent(conceptCell);
-
                                         summaryEl.innerHTML = `
-                                            <div>${conceptContent || '<span class="italic text-gray-500">無標題</span>'}</div>
-                                            <svg class="w-5 h-5 transition-transform duration-300 group-open:rotate-180 text-gray-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                              <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
-                                            </svg>
+                                            <div>${card.frontImage ? `<img src="${card.frontImage}" class="max-h-20 mb-2">` : ''}${card.frontText}</div>
+                                            <svg class="w-5 h-5 transition-transform group-open:rotate-180" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
                                         `;
 
                                         const answerDiv = document.createElement('div');
-                                        answerDiv.className = 'mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 space-y-4';
+                                        answerDiv.className = 'mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 space-y-4';
 
-                                        // 處理定義 (第二欄) 和補充資訊 (第三欄)
-                                        const definitionContent = renderMixedContent(definitionCell);
-                                        const extraInfoContent = renderMixedContent(extraInfoCell);
+                                        // 背面內容 (C 欄)
+                                        let html = `<div>${card.backImage ? `<img src="${card.backImage}" class="max-w-full h-auto mb-2">` : ''}${card.backText}</div>`;
 
-                                        let finalAnswerHTML = '';
-                                        if (definitionContent) {
-                                            finalAnswerHTML += `<div>${definitionContent}</div>`;
+                                        // 【判斷 D 欄】如果有內容才顯示灰色區塊
+                                        if (card.extraNote && card.extraNote.trim() !== "" && card.extraNote !== "<p><br></p>") {
+                                            html += `<div class="mt-2 p-3 bg-gray-100 dark:bg-gray-700 rounded text-sm">${card.extraNote}</div>`;
                                         }
 
-                                        if (extraInfoContent) {
-                                            finalAnswerHTML += `<div class="mt-2 p-3 bg-gray-100 dark:bg-gray-700 rounded text-sm">${extraInfoContent}</div>`;
-                                        }
-
-                                        if (!finalAnswerHTML) {
-                                             finalAnswerHTML = '<p class="text-gray-500 italic">無詳細內容。</p>';
-                                        }
-
-                                        answerDiv.innerHTML = finalAnswerHTML;
-
+                                        answerDiv.innerHTML = html;
                                         detailsEl.appendChild(summaryEl);
                                         detailsEl.appendChild(answerDiv);
                                         contentContainer.appendChild(detailsEl);
                                     });
-
-                                    const toggleBtn = document.getElementById('toggleAllConceptsBtn');
-                                    if (toggleBtn) {
-                                        toggleBtn.textContent = '展開全部';
-                                        toggleBtn.dataset.state = 'closed';
-                                    }
-
-                                    if (itemsDisplayed === 0) {
-                                        if (searchText) {
-                                            contentContainer.innerHTML = `<p class="text-center text-gray-500 dark:text-gray-400 py-4">在此工作表中找不到符合「${searchText}」的內容。</p>`;
-                                        } else {
-                                            contentContainer.innerHTML = '<p class="text-center text-gray-500 dark:text-gray-400 py-4">此工作表無有效內容可顯示。</p>';
-                                        }
-                                        if (toggleBtn) toggleBtn.style.display = 'none';
-                                    } else {
-                                        if (toggleBtn) toggleBtn.style.display = '';
-                                    }
                                 }
 
                                 // 【新增】處理混合內容（文字+圖片連結）的輔助函數
@@ -9179,110 +9092,87 @@
 
                                 // 【新增】可重用的函數，用於將 excelSheets 轉換為 cardsData 和 decksData (已修復和強化)
                                 function processSheetsIntoCardsAndDecks() {
-                                    console.log("正在將工作表數據轉換為內部卡組和字卡...");
+                                    console.log("正在按工作表分組轉換資料...");
                                     let totalImportCount = 0;
-                                    let gsheetsConflictDecks = [];
 
                                     Object.keys(excelSheets).forEach(sheetName => {
-                                        if (!excelSheets[sheetName]) return;
-
-                                        // 檢查是否已存在同名卡組
-                                        const existingDeck = decksData.find(d => d.name === sheetName);
-                                        if (existingDeck) {
-                                            console.log(`卡組 "${sheetName}" 已存在，跳過創建。`);
-                                            if (excelSheets[sheetName].isGSheet) {
-                                                gsheetsConflictDecks.push(sheetName);
-                                            }
-                                            return;
-                                        }
-
-                                        const newDeck = {
-                                            id: Date.now() + Math.floor(Math.random() * 1000),
-                                            name: sheetName,
-                                            description: `從 ${excelSheets[sheetName].isGSheet ? 'Google Sheets' : '檔案'} 自動導入`,
-                                            cardIds: [],
-                                            createdAt: Date.now()
-                                        };
-                                        decksData.push(newDeck);
-
                                         const sheet = excelSheets[sheetName];
                                         if (!sheet || !sheet.data) return;
 
-                                        const sheetData = sheet.data;
-                                        const hasFormatting = sheet.hasFormatting;
-                                        const frontCol = sheetOptions[sheetName]?.frontColumn || 0;
-                                        const backCol = sheetOptions[sheetName]?.backColumn || 1;
+                                        // 檢查是否已存在同名卡組，若存在則先清空該卡組字卡，達到「更新」效果
+                                        let targetDeck = decksData.find(d => d.name === sheetName);
+                                        if (!targetDeck) {
+                                            targetDeck = {
+                                                id: Date.now() + Math.floor(Math.random() * 1000),
+                                                name: sheetName,
+                                                description: "從 Google Sheets 導入",
+                                                cardIds: [],
+                                                createdAt: Date.now()
+                                            };
+                                            decksData.push(targetDeck);
+                                        } else {
+                                            targetDeck.cardIds = []; // 清空舊內容
+                                        }
 
-                                        // 從第二行開始（跳過標題行）
+                                        const sheetData = sheet.data;
+                                        // 預設對應：A=0, B=1, C=2, D=3
+                                        const frontCol = 1; // B 欄
+                                        const backCol = 2;  // C 欄
+                                        const noteCol = 3;  // D 欄
+
                                         for (let i = 1; i < sheetData.length; i++) {
                                             const row = sheetData[i];
-                                            if (!row || !row.length) continue;
+                                            if (!row || row.length <= 1) continue;
 
-                                            const frontContentSource = row[frontCol];
-                                            const backContentSource = row[backCol];
-                                            let frontText = '', frontImage = null, backText = '', backImage = null;
+                                            // 處理正面 (B欄)
+                                            const frontSource = row[frontCol];
+                                            const processedFront = processImportedContent(String(frontSource || ''));
+                                            let fText = processedFront.text ? processedFront.text.replace(/\n/g, '<br>') : '';
+                                            let fImg = processedFront.image;
 
-                                            // --- 【核心修改開始】---
-                                            // 1. 處理正面內容
-                                            if (frontContentSource) {
-                                                if (hasFormatting && typeof frontContentSource === 'object' && frontContentSource.delta) {
-                                                    // 處理來自Google API的帶格式內容
-                                                    frontText = convertDeltaToHTML(frontContentSource.delta);
-                                                    // 檢查是否有圖片連結（即使是帶格式內容，也可能包含圖片連結）
-                                                    const processedForImage = processImportedContent(frontContentSource.value || '');
-                                                    frontImage = processedForImage.image;
-                                                } else {
-                                                    // 處理純文本或來自Excel的內容
-                                                    const processed = processImportedContent(String(frontContentSource));
-                                                    frontText = processed.text ? processed.text.replace(/\n/g, '<br>') : '';
-                                                    frontImage = processed.image;
-                                                }
-                                            }
+                                            // 如果 B 欄沒東西，這行就跳過
+                                            if (!fText && !fImg) continue;
 
-                                            // 2. 驗證正面內容是否為空
-                                            // 使用 stripHtml 移除HTML標籤後再檢查，確保 <p><br></p> 這種情況被視為空
-                                            if (stripHtml(frontText).trim() === '' && !frontImage) {
-                                                console.log(`已跳過工作表 "${sheetName}" 的第 ${i + 1} 行，原因：正面內容為空。`);
-                                                continue;
-                                            }
+                                            // 處理背面 (C欄)
+                                            const backSource = row[backCol];
+                                            const processedBack = processImportedContent(String(backSource || ''));
+                                            let bText = processedBack.text ? processedBack.text.replace(/\n/g, '<br>') : '';
+                                            let bImg = processedBack.image;
 
-                                            // 3. 處理背面內容
-                                            if (backContentSource) {
-                                                 if (hasFormatting && typeof backContentSource === 'object' && backContentSource.delta) {
-                                                    backText = convertDeltaToHTML(backContentSource.delta);
-                                                    const processedForImage = processImportedContent(backContentSource.value || '');
-                                                    backImage = processedForImage.image;
-                                                } else {
-                                                    const processed = processImportedContent(String(backContentSource));
-                                                    backText = processed.text ? processed.text.replace(/\n/g, '<br>') : '';
-                                                    backImage = processed.image;
-                                                }
-                                            }
-                                            // --- 【核心修改結束】---
+                                            // 處理備註 (D欄) - 同時檢查 D 欄是否有圖片連結
+                                            const noteSource = row[noteCol];
+                                            const processedNote = processImportedContent(String(noteSource || ''));
+                                            let nText = processedNote.text ? processedNote.text.replace(/\n/g, '<br>') : '';
+                                            let nImg = processedNote.image;
 
                                             const newCardId = Date.now() + i + Math.floor(Math.random() * 10000);
+
+                                            // 將 D 欄內容整合進背面或獨立存放
+                                            // 這裡我們將 D 欄文字與圖片合併到一個 note 屬性
+                                            let finalNoteHTML = nText;
+                                            if (nImg) {
+                                                finalNoteHTML = `<img src="${nImg}" class="max-w-full h-auto rounded-lg">` + (nText ? `<br>${nText}` : '');
+                                            }
+
                                             const newCard = {
                                                 id: newCardId,
-                                                frontText: frontText,
-                                                frontImage: frontImage,
-                                                backText: backText,
-                                                backImage: backImage,
+                                                frontText: fText,
+                                                frontImage: fImg,
+                                                backText: bText,
+                                                backImage: bImg,
+                                                extraNote: finalNoteHTML, // 新增欄位儲存 D 欄
                                                 nextReview: Date.now(),
                                                 repetitions: 0,
                                                 easeFactor: 2.0,
                                                 interval: 1.0
                                             };
+
                                             cardsData.push(newCard);
-                                            newDeck.cardIds.push(newCardId);
+                                            targetDeck.cardIds.push(newCardId);
                                             totalImportCount++;
                                         }
                                     });
-
-                                    console.log(`總共導入了 ${totalImportCount} 張有效字卡。`);
-
-                                    if(gsheetsConflictDecks.length > 0){
-                                        showNotification(`注意: ${gsheetsConflictDecks.join(', ')} 已存在，本次導入已跳過。`, 4000);
-                                    }
+                                    console.log(`導入完成，共計 ${totalImportCount} 張字卡。`);
                                 }
 
                             </script>
