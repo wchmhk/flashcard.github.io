@@ -3777,22 +3777,20 @@
         function processImportedContent(content) {
             if (!content) return { text: '' };
 
-            // 將內容轉為字串
             let str = String(content);
 
-            // 1. 處理 Google Drive 連結轉圖片
-            // 支援格式: https://drive.google.com/file/d/ID/view... 或 open?id=ID
+            // 1. 先處理 Google Drive 圖片轉換，但不更動文字內容
             const driveRegex = /https:\/\/drive\.google\.com\/(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]+)[^\s<]*/g;
-
-            // 使用 images.weserv.nl 代理以繞過 Google 的直接連結限制
             str = str.replace(driveRegex, (match, fileId) => {
                 const directUrl = `https://drive.google.com/uc?id=${fileId}`;
                 const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(directUrl)}`;
-                return `<img src="${proxyUrl}" class="max-w-full h-auto rounded-lg my-2 shadow-sm block" onerror="this.onerror=null; this.src='${match}';">`;
+                // 將圖片放在區塊中，避免干擾後續文字
+                return `<img src="${proxyUrl}" class="max-w-full h-auto rounded-lg my-2 block shadow-sm" onerror="this.style.display='none';">`;
             });
 
-            // 2. 處理格內換行 (將 \n 轉為 <br>)
-            str = str.replace(/\n/g, '<br>');
+            // 2. 核心修正：將所有格式的換行符號轉為 HTML 換行標籤
+            // \r?\n 可以同時匹配不同系統產生的儲存格內換行
+            str = str.replace(/\r?\n/g, '<br>');
 
             return { text: str.trim() };
         }
@@ -9051,61 +9049,71 @@
 
                                 // 【新增】可重用的函數，用於將 excelSheets 轉換為 cardsData 和 decksData (已修復和強化)
                                 function processSheetsIntoCardsAndDecks() {
-                                    console.log("正在執行多工作表導入 (B正/C反)...");
+                                    console.log("開始精準導入：確保順序與完整性...");
                                     let totalImportCount = 0;
+                                    const now = Date.now();
 
                                     Object.keys(excelSheets).forEach(sheetName => {
                                         const sheet = excelSheets[sheetName];
                                         if (!sheet || !sheet.data) return;
 
-                                        // 確保或重置卡組
+                                        // --- 修正順序問題：清理舊資料 ---
+                                        // 找到現有的同名卡組
                                         let targetDeck = decksData.find(d => d.name === sheetName);
-                                        if (!targetDeck) {
+
+                                        if (targetDeck) {
+                                            // 如果卡組已存在，從全域 cardsData 中移除該卡組原本的所有字卡
+                                            const oldIds = new Set(targetDeck.cardIds);
+                                            cardsData = cardsData.filter(c => !oldIds.has(c.id));
+                                            targetDeck.cardIds = []; // 清空 ID 列表準備重新填入
+                                        } else {
+                                            // 如果不存在，建立新卡組
                                             targetDeck = {
-                                                id: Date.now() + Math.floor(Math.random() * 1000),
+                                                id: now + Math.floor(Math.random() * 1000),
                                                 name: sheetName,
                                                 description: "從 Google Sheets 導入",
                                                 cardIds: [],
-                                                createdAt: Date.now()
+                                                createdAt: now
                                             };
                                             decksData.push(targetDeck);
-                                        } else {
-                                            targetDeck.cardIds = []; // 每次導入都更新該卡組內容
                                         }
 
                                         const sheetData = sheet.data;
+                                        // 從第 2 行開始 (index 1)，因為第 1 行是標題
                                         for (let i = 1; i < sheetData.length; i++) {
                                             const row = sheetData[i];
-                                            // 確保該列至少有 B 欄內容
                                             if (!row || row.length < 2) continue;
 
-                                            // Mapping: B=index 1 (正面), C=index 2 (背面)
-                                            const frontRaw = row[1]; // B 欄
-                                            const backRaw = row[2];  // C 欄
+                                            // B 欄 = 概念 (index 1), C 欄 = 定義 (index 2)
+                                            const frontRaw = row[1];
+                                            const backRaw = row[2];
 
                                             const fResult = processImportedContent(frontRaw);
                                             const bResult = processImportedContent(backRaw);
 
-                                            // 如果正面(B欄)完全沒文字也沒圖片連結，就跳過
-                                            if (stripHtml(fResult.text).trim() === "" && !fResult.text.includes('<img')) continue;
+                                            // 檢查內容有效性
+                                            if (!fResult.text && !bResult.text) continue;
 
-                                            const newCardId = Date.now() + i + Math.floor(Math.random() * 10000);
+                                            // 生成唯一且具備順序性的 ID
+                                            const newCardId = parseInt(`${now}${i}`);
+
                                             const newCard = {
                                                 id: newCardId,
                                                 frontText: fResult.text,
                                                 backText: bResult.text,
-                                                nextReview: Date.now(),
+                                                nextReview: now,
                                                 repetitions: 0,
                                                 easeFactor: 2.0,
                                                 interval: 1.0
                                             };
 
                                             cardsData.push(newCard);
-                                            targetDeck.cardIds.push(newCardId);
+                                            targetDeck.cardIds.push(newCardId); // 按順序推入卡組
                                             totalImportCount++;
                                         }
                                     });
-                                    console.log(`導入成功：共 ${totalImportCount} 張字卡，分布於 ${Object.keys(excelSheets).length} 個卡組。`);
+
+                                    console.log(`導入完成！共計 ${totalImportCount} 張字卡，已按 Excel 順序排列。`);
                                 }
 
                             </script>
