@@ -9264,7 +9264,7 @@
                                     });
                                 }
 
-                                // 核心 AI 呼叫函數 (升級版：使用最新的 Gemini 2.5 Flash 模型)
+                                // 核心 AI 呼叫函數 (最終穩定與防截斷版)
                                                                 async function askGeminiMain(prompt, fileData = null) {
                                                                     let apiKey = localStorage.getItem('google_api_key');
 
@@ -9279,8 +9279,8 @@
                                                                         return null;
                                                                     }
 
-                                                                    // 關鍵修正：gemini-1.5-flash 已退役，改用最新的 gemini-2.5-flash 模型
-                                                                    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+                                                                    // 使用最新且最穩定的 gemini-2.0-flash 模型
+                                                                    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
                                                                     const parts = [{ text: prompt }];
                                                                     if (fileData) {
@@ -9299,10 +9299,8 @@
                                                                             body: JSON.stringify({
                                                                                 contents: [{ parts: parts }],
                                                                                 generationConfig: {
-                                                                                    temperature: 0.7,
-                                                                                    topK: 40,
-                                                                                    topP: 0.95,
-                                                                                    maxOutputTokens: 2048,
+                                                                                    temperature: 0.2, // 降低隨機性，讓 JSON 結構更穩定且不易出錯
+                                                                                    maxOutputTokens: 8192, // 關鍵修改：大幅增加輸出上限，防止話說一半被截斷
                                                                                 }
                                                                             })
                                                                         });
@@ -9316,18 +9314,134 @@
                                                                             return null;
                                                                         }
 
-                                                                        // 解析 AI 回傳的文字
-                                                                        if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-                                                                            return data.candidates[0].content.parts[0].text;
-                                                                        } else {
-                                                                            throw new Error("AI 無法生成內容，可能受到安全過濾或輸入內容不清晰。");
+                                                                        // 解析 AI 回傳的文字 (將所有片段組合起來，防止被分段)
+                                                                        if (data.candidates && data.candidates[0]) {
+                                                                            if (data.candidates[0].finishReason === 'SAFETY') {
+                                                                                throw new Error("生成內容被安全過濾機制攔截。");
+                                                                            }
+                                                                            if (data.candidates[0].content && data.candidates[0].content.parts) {
+                                                                                return data.candidates[0].content.parts.map(p => p.text).join('');
+                                                                            }
                                                                         }
+
+                                                                        throw new Error("AI 無法生成內容，可能檔案太大或內容不清晰。");
                                                                     } catch (error) {
                                                                         console.error("AI 呼叫失敗:", error);
                                                                         showNotification("連線失敗: " + error.message);
                                                                         return null;
                                                                     }
                                                                 }
+
+                                                                // 綁定 AI 解釋按鈕
+                                                                document.getElementById('aiExplainBtn').addEventListener('click', async (e) => {
+                                                                    e.stopPropagation();
+
+                                                                    const card = cardsToReview[currentCardIndex];
+                                                                    const front = stripHtml(card.frontText);
+                                                                    const back = stripHtml(card.backText);
+
+                                                                    const btn = document.getElementById('aiExplainBtn');
+                                                                    btn.innerHTML = '...';
+                                                                    btn.disabled = true;
+
+                                                                    const prompt = `你是一位專業地理老師，請針對這張字卡解釋概念並舉一個香港例子：概念「${front}」，定義「${back}」。請用繁體中文。`;
+
+                                                                    const result = await askGeminiMain(prompt);
+
+                                                                    if (result) {
+                                                                        // 彈出顯示結果
+                                                                        const modal = document.createElement('div');
+                                                                        modal.className = 'fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-6';
+                                                                        modal.innerHTML = `
+                                                                            <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl max-w-md w-full shadow-2xl">
+                                                                                <h4 class="text-blue-600 font-bold mb-2">✨ AI 智慧解釋</h4>
+                                                                                <div class="text-sm leading-relaxed mb-4 max-h-60 overflow-y-auto">${result.replace(/\n/g, '<br>')}</div>
+                                                                                <button onclick="this.parentElement.parentElement.remove()" class="w-full py-2 bg-gray-200 dark:bg-gray-700 rounded-lg font-bold">關閉</button>
+                                                                            </div>
+                                                                        `;
+                                                                        document.body.appendChild(modal);
+                                                                    }
+
+                                                                    btn.innerHTML = '<span class="font-bold text-sm">AI</span>';
+                                                                    btn.disabled = false;
+                                                                });
+
+                                                                // --- AI 出題邏輯 (自動修復殘缺 JSON 版) ---
+                                                                document.getElementById('aiGenerateBtn').onclick = async () => {
+                                                                    const text = document.getElementById('aiInputText').value.trim();
+                                                                    if (!aiAttachedFile && !text) {
+                                                                        showNotification("請提供檔案或輸入文字內容");
+                                                                        return;
+                                                                    }
+                                                                    if (!aiSelectedDeckId) {
+                                                                        showNotification("請先選擇目標卡組");
+                                                                        return;
+                                                                    }
+
+                                                                    const btn = document.getElementById('aiGenerateBtn');
+                                                                    const spinner = document.getElementById('aiGenSpinner');
+                                                                    btn.disabled = true;
+                                                                    if (spinner) spinner.classList.remove('hidden');
+
+                                                                    const prompt = `你是一位專業的地理老師。請分析所提供的${aiAttachedFile ? '檔案內容' : '文字內容'}。
+                                                                    請生成 3 到 5 組字卡。
+                                                                    格式要求：絕對只能返回一個 JSON 陣列，格式為 [{"front": "概念...", "back": "定義..."}]。
+                                                                    不要輸出任何 Markdown 標記，也不要任何問候文字！
+                                                                    補充指令：${text}`;
+
+                                                                    const result = await askGeminiMain(prompt, aiAttachedFile);
+
+                                                                    if (result) {
+                                                                        try {
+                                                                            let cleanJson = result.trim();
+                                                                            // 尋找陣列開頭
+                                                                            const startIndex = cleanJson.indexOf('[');
+
+                                                                            if (startIndex !== -1) {
+                                                                                // 尋找陣列結尾
+                                                                                let endIndex = cleanJson.lastIndexOf(']');
+
+                                                                                if (endIndex !== -1 && endIndex > startIndex) {
+                                                                                    // 正常情況：有頭有尾
+                                                                                    cleanJson = cleanJson.substring(startIndex, endIndex + 1);
+                                                                                } else {
+                                                                                    // 異常情況：被截斷，嘗試自動修補結尾
+                                                                                    console.warn("JSON 似乎被截斷，嘗試自動修復...");
+                                                                                    const lastBrace = cleanJson.lastIndexOf('}');
+                                                                                    if (lastBrace !== -1 && lastBrace > startIndex) {
+                                                                                        // 補上遺失的陣列右括號
+                                                                                        cleanJson = cleanJson.substring(startIndex, lastBrace + 1) + ']';
+                                                                                    } else {
+                                                                                        throw new Error("內容截斷過於嚴重，無法修復。");
+                                                                                    }
+                                                                                }
+                                                                            } else {
+                                                                                throw new Error("無法在 AI 回覆中找到 JSON 陣列符號 '['");
+                                                                            }
+
+                                                                            const cards = JSON.parse(cleanJson);
+                                                                            const targetDeck = decksData.find(d => d.id === aiSelectedDeckId);
+
+                                                                            cards.forEach(c => {
+                                                                                const id = addNewCard(`<p>${c.front}</p>`, null, `<p>${c.back}</p>`, null);
+                                                                                targetDeck.cardIds.push(id);
+                                                                            });
+
+                                                                            showNotification(`成功識辨並生成 ${cards.length} 張字卡！`);
+                                                                            if (typeof clearAiFile === 'function') clearAiFile();
+                                                                            document.getElementById('aiInputText').value = '';
+                                                                            saveDataToLocalStorage();
+                                                                            loadAllCards();
+                                                                        } catch (e) {
+                                                                            console.error("AI 格式解析錯誤。原始回傳內容為:\n", result);
+                                                                            console.error("錯誤細節:", e);
+                                                                            showNotification("AI 回傳被截斷或格式錯誤，請再試一次");
+                                                                        }
+                                                                    }
+
+                                                                    btn.disabled = false;
+                                                                    if (spinner) spinner.classList.add('hidden');
+                                                                };
 
                                 // 綁定 AI 解釋按鈕
                                 document.getElementById('aiExplainBtn').addEventListener('click', async (e) => {
