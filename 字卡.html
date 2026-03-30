@@ -2389,42 +2389,13 @@
 
         // 從 Google Sheets 載入數據
         function loadGSheetsData() {
-            if (!GOOGLE_API_KEY) {
-                showNotification('請先設置Google API密鑰');
-                const apiSettingsModal = document.getElementById('apiSettingsModal');
-                if (apiSettingsModal) {
-                    apiSettingsModal.classList.remove('hidden');
-                    const googleApiKeyInput = document.getElementById('googleApiKeyInput');
-                    if (googleApiKeyInput) {
-                        googleApiKeyInput.focus();
-                    }
-                }
-                return;
-            }
-
             const gSheetsUrl = document.getElementById('gSheetsUrlInput').value.trim();
             const enableSync = document.getElementById('enableSyncGSheets').checked;
             const setDefault = document.getElementById('setDefaultGSheetUrl').checked;
 
-            if (!gSheetsUrl) {
-                showNotification('請輸入 Google Sheets URL');
-                return;
-            }
-
-            if (!isValidGSheetsUrl(gSheetsUrl)) {
+            if (!gSheetsUrl || !isValidGSheetsUrl(gSheetsUrl)) {
                 showNotification('請輸入有效的 Google Sheets URL');
                 return;
-            }
-
-            if (setDefault) {
-                localStorage.setItem('flashcard_defaultGSheetUrl', gSheetsUrl);
-                showNotification('已將此連結設為預設，下次開啟將自動載入。', 2500);
-            } else {
-                const currentDefault = localStorage.getItem('flashcard_defaultGSheetUrl');
-                if (currentDefault === gSheetsUrl) {
-                    localStorage.removeItem('flashcard_defaultGSheetUrl');
-                    showNotification('已取消此連結的預設設定。', 2500);
-                }
             }
 
             const loadBtn = document.getElementById('loadGSheetsBtn');
@@ -2434,106 +2405,87 @@
 
             const spreadsheetId = extractSpreadsheetId(gSheetsUrl);
 
-            loadFormattedGSheetsData(spreadsheetId, gSheetsUrl, enableSync)
-                .then(() => {
-                    // 【核心修改】移除這裡所有重複的處理邏輯
-                    // 直接調用統一的處理函數
-                    processSheetsIntoCardsAndDecks();
+            // 如果有 API Key，嘗試帶格式導入；否則直接走 CSV 模式
+            if (GOOGLE_API_KEY) {
+                loadFormattedGSheetsData(spreadsheetId, gSheetsUrl, enableSync)
+                    .then(() => {
+                        processSheetsIntoCardsAndDecks();
+                        refreshAllViews();
+                        saveDataToLocalStorage();
+                        closeGSheetsImportModal();
+                    })
+                    .catch(error => {
+                        console.warn('API 載入失敗，切換至 CSV 模式:', error);
+                        return loadGSheetsDataWithCSV(spreadsheetId, gSheetsUrl, enableSync, loadBtn, originalText)
+                            .then(() => closeGSheetsImportModal());
+                    })
+                    .finally(() => {
+                        loadBtn.disabled = false;
+                        loadBtn.textContent = originalText;
+                    });
+            } else {
+                // 無 API Key，直接使用 CSV
+                loadGSheetsDataWithCSV(spreadsheetId, gSheetsUrl, enableSync, loadBtn, originalText)
+                    .then(() => closeGSheetsImportModal())
+                    .finally(() => {
+                        loadBtn.disabled = false;
+                        loadBtn.textContent = originalText;
+                    });
+            }
 
-                    // 刷新所有相關視圖
-                    refreshAllViews();
-
-                    // 保存到本地存儲
-                    saveDataToLocalStorage();
-
-                    // 關閉導入對話框
-                    closeGSheetsImportModal();
-                })
-                .catch(error => {
-                    console.error('Google Sheets API 錯誤:', error);
-                    showNotification(`載入失敗: ${error.message}`, 4000);
-                })
-                .finally(() => {
-                    loadBtn.disabled = false;
-                    loadBtn.textContent = originalText;
-                });
+            if (setDefault) {
+                localStorage.setItem('flashcard_defaultGSheetUrl', gSheetsUrl);
+            }
         }
 
-        // 使用 CSV 方式載入 Google Sheets 數據（無格式）
+        // 使用 CSV 方式載入 Google Sheets 數據（無格式備援方案）
         function loadGSheetsDataWithCSV(spreadsheetId, gSheetsUrl, enableSync, loadBtn, originalText) {
-          // 处理正面内容，检测 base64 图片
-          const processedFront = processImportedContent(frontCell);
-          const frontText = processedFront.text;
-          const frontImage = processedFront.image;
-
-          // 处理背面内容，检测 base64 图片
-          const processedBack = processImportedContent(backCell);
-          const backText = processedBack.text;
-          const backImage = processedBack.image;
-
-          // 创建新卡片时设置图片内容
-          const newCard = {
-              id: newCardId,
-              frontText: frontText,
-              frontImage: frontImage,
-              backText: backText,
-              backImage: backImage,
-              nextReview: Date.now(),
-              repetitions: 0,
-              easeFactor: 2.0,
-              interval: 1.0
-          };
-            // 構建直接導出 CSV 的 URL
             const exportUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv`;
-            console.log('嘗試直接從 URL 載入數據:', exportUrl);
+            console.log('API 失效，嘗試使用 CSV 備援方案載入:', exportUrl);
 
             return new Promise((resolve, reject) => {
-                // 首先嘗試直接使用fetch獲取CSV
                 fetch(exportUrl, {
                     method: 'GET',
-                    credentials: 'omit',  // 避免cookie問題
-                    mode: 'cors',         // 嘗試跨域請求
-                    cache: 'no-cache'     // 避免緩存問題
+                    credentials: 'omit',
+                    mode: 'cors',
+                    cache: 'no-cache'
                 })
                 .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`無法直接訪問Google Sheets，狀態碼: ${response.status}`);
-                    }
+                    if (!response.ok) throw new Error(`無法直接訪問表格，請確認該試算表已設定為「知道連結的人均可檢視」`);
                     return response.text();
                 })
                 .then(csvData => {
-                    // 處理CSV數據
                     const parsedData = parseCSV(csvData);
+                    if (parsedData.length < 2) throw new Error("表格內沒有足夠的數據（至少需要兩行）");
 
-                    // 保存 Google Sheets 數據
-                    const sheetName = 'GoogleSheet';
+                    const sheetName = 'GoogleSheet_Import';
+
+                    // 重置全域變數，確保 processSheetsIntoCardsAndDecks 能抓到資料
                     excelSheets = {};
                     excelSheets[sheetName] = {
                         data: parsedData,
                         columns: parsedData[0] || [],
-                        hasFormatting: false
+                        hasFormatting: false,
+                        isGSheet: true
                     };
 
-                    // 設置默認卡組映射
+                    // 設定預設的欄位映射（第 0 欄為正面，第 1 欄為背面）
                     sheetMappings = {};
                     sheetMappings[sheetName] = {
                         deckOption: 'new',
                         deckId: '',
                         newDeckName: 'Google Sheets 導入',
-                        newDeckDescription: '從 Google Sheets 導入的字卡'
+                        newDeckDescription: '從 Google Sheets 自動同步的內容'
                     };
 
-                    // 設置默認列選擇
                     sheetOptions = {};
                     sheetOptions[sheetName] = {
                         frontColumn: 0,
                         backColumn: 1
                     };
 
-                    // 設置活動工作表
                     activeSheetName = sheetName;
 
-                    // 如果啟用同步，保存 URL 和 sync 標記到元數據
                     if (enableSync) {
                         window.gSheetsSyncData = {
                             url: gSheetsUrl,
@@ -2542,39 +2494,28 @@
                             syncEnabled: true,
                             useFormatting: false
                         };
-
-                        setupGSheetsSync();
                     }
 
-                    // 恢復按鈕狀態
+                    // 執行資料轉換
+                    processSheetsIntoCardsAndDecks();
+                    refreshAllViews();
+                    saveDataToLocalStorage();
+
                     if (loadBtn) {
                         loadBtn.disabled = false;
                         loadBtn.textContent = originalText || '載入';
                     }
 
-                    showNotification('成功載入 Google Sheets 數據（純文本方式）');
+                    showNotification('成功透過 CSV 載入資料（純文字）');
                     resolve();
                 })
                 .catch(error => {
-                    console.error('Google Sheets 載入錯誤:', error);
-
-                    if (isSafari) {
-                        // 為 Safari 提供手動下載的選項
-                        const manualDownloadUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=xlsx`;
-                        showNotification(`
-                            Safari 無法自動載入 Google Sheets。請
-                            <a href="${manualDownloadUrl}" target="_blank" class="text-blue-500 underline">點擊此處下載</a>
-                            然後使用"導入Excel"功能上傳`, 10000);
-                    } else {
-                        showNotification(`載入失敗: ${error.message || '無法連接到Google Sheets'}`);
-                    }
-
-                    // 恢復按鈕狀態
+                    console.error('CSV 載入錯誤:', error);
+                    showNotification(`載入失敗: ${error.message}`);
                     if (loadBtn) {
                         loadBtn.disabled = false;
                         loadBtn.textContent = originalText || '載入';
                     }
-
                     reject(error);
                 });
             });
